@@ -280,13 +280,13 @@ public class MainForm : Form
             return;
         }
 
-        if (!TryGetValue(textBoxHue, "Оттенок", out int hue))
+        if (!TryGetValue(textBoxHue, true, "Оттенок", out int hue))
             return;
 
-        if (!TryGetValue(textBoxSaturation, "Насыщенность", out int saturation))
+        if (!TryGetValue(textBoxSaturation, false, "Насыщенность", out int saturation))
             return;
 
-        if (!TryGetValue(textBoxBrightness, "Яркость", out int brightness))
+        if (!TryGetValue(textBoxBrightness, false, "Яркость", out int brightness))
             return;
 
         buttonConvert.Enabled = false;
@@ -324,7 +324,7 @@ public class MainForm : Form
         }
     }
 
-    private static bool TryGetValue(TextBox textBox, string name, out int value)
+    private static bool TryGetValue(TextBox textBox, bool h, string name, out int value)
     {
         value = 0;
 
@@ -336,7 +336,7 @@ public class MainForm : Form
             return false;
         }
 
-        if (value < -100 || value > 100)
+        if (value < (h ? -360 : -100) || value > ( h ? 360 : 100))
         {
             MessageBox.Show($"{name}: значение должно быть от -100 до 100.", "Ошибка ввода", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             textBox.Focus();

@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="../2th_point/2th_point/2th_point.csproj" Id="6182f986-4562-4f5c-bf01-1a033a0118ae" />
+  <Project Path="../GrayscaleLab/GrayscaleLab.csproj" Id="d19c2ec0-aadc-4ccd-aef1-2aefe1a59de4" />
+  <Project Path="3th_point.csproj" />
+</Solution>
