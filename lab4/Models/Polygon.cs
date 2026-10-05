@@ -16,4 +16,9 @@ public class Polygon
     {
         Vertices.Add(point);
     }
+    public void ChangePoints(List<PointF> points)
+    {
+        Vertices.Clear();
+        Vertices.AddRange(points);
+    }
 }
