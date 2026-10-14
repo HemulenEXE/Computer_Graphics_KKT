@@ -1,3 +1,6 @@
 <Solution>
+  <Project Path="../1b_Bresenham/1b_Bresenham/1b_Bresenham.csproj" Id="1f7be125-678b-4678-b96d-63b13552fa13" />
+  <Project Path="../1_v/1_v/1_v.csproj" />
+  <Project Path="../WuLineLab/WuLineLab/WuLineLab.csproj" Id="f6bea2b3-375e-474c-8a25-012bdb75a5c6" />
   <Project Path="1a_3.csproj" />
 </Solution>

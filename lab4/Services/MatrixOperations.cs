@@ -35,7 +35,7 @@ namespace lab4.Services
             float[,] rotationMatrix = new float[3, 3];
 
             rotationMatrix[0, 0] = (float)Math.Cos(radians);
-            rotationMatrix[0, 1] = (float)MathF.Cos(radians);
+            rotationMatrix[1, 1] = (float)MathF.Cos(radians);
 
             rotationMatrix[1, 0] = -(float)Math.Sin(radians);
             rotationMatrix[0, 1] = (float)MathF.Sin(radians);
