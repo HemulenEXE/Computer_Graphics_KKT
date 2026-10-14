@@ -1,0 +1,10 @@
+C:\Users\Admin\Desktop\Домашка\КомпГрафика\fractals\obj\Debug\fractals.csproj.AssemblyReference.cache
+C:\Users\Admin\Desktop\Домашка\КомпГрафика\fractals\obj\Debug\fractals.Form1.resources
+C:\Users\Admin\Desktop\Домашка\КомпГрафика\fractals\obj\Debug\fractals.Properties.Resources.resources
+C:\Users\Admin\Desktop\Домашка\КомпГрафика\fractals\obj\Debug\fractals.csproj.GenerateResource.cache
+C:\Users\Admin\Desktop\Домашка\КомпГрафика\fractals\obj\Debug\fractals.csproj.CoreCompileInputs.cache
+C:\Users\Admin\Desktop\Домашка\КомпГрафика\fractals\bin\Debug\fractals.exe.config
+C:\Users\Admin\Desktop\Домашка\КомпГрафика\fractals\bin\Debug\fractals.exe
+C:\Users\Admin\Desktop\Домашка\КомпГрафика\fractals\bin\Debug\fractals.pdb
+C:\Users\Admin\Desktop\Домашка\КомпГрафика\fractals\obj\Debug\fractals.exe
+C:\Users\Admin\Desktop\Домашка\КомпГрафика\fractals\obj\Debug\fractals.pdb
