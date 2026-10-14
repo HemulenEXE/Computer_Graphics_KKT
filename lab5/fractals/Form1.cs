@@ -254,7 +254,7 @@ namespace fractals
         {
             foreach (Segment segment in fractal)
             {
-                float t = (float)segment.Depth / maxBranchDepth;
+                float t = maxBranchDepth != 0? (float)segment.Depth / maxBranchDepth: 0;
 
                 // Толщина уменьшается от основания к концам ветвей
                 float lineWidth = MaxLineWidth + (MinLineWidth - MaxLineWidth) * (float)Math.Pow(t, 0.5);
