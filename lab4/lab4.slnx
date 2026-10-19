@@ -1,3 +1,6 @@
 <Solution>
-  <Project Path="lab4.csproj" />
+  <Folder Name="/Элементы решения/">
+    <File Path="readme" />
+  </Folder>
+  <Project Path="../../../../../../Desktop/Computer_Graphics_KKT/lab4/lab4.csproj" />
 </Solution>
