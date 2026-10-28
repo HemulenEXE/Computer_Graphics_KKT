@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -95,6 +95,8 @@ namespace PolyhedraLab
             double m = b.Y - a.Y;
             double n = b.Z - a.Z;
             double length = Math.Sqrt(l * l + m * m + n * n);
+            if (length < 1e-12)
+                throw new ArgumentException("Точки прямой не должны совпадать.");
             l /= length;
             m /= length;
             n /= length;
@@ -108,8 +110,9 @@ namespace PolyhedraLab
             matrix[1, 1] = m * m + c * (1 - m * m);
             matrix[1, 2] = m * (1 - c) * n + l * s;
             matrix[2, 0] = l * (1 - c) * n + m * s;
-            matrix[2, 2] = m* (1 - c) * n - l * s;
-            matrix[3, 3] = n * n + c * (1 - n * n);
+            matrix[2, 1] = m * (1 - c) * n - l * s;
+            matrix[2, 2] = n * n + c * (1 - n * n);
+            matrix[3, 3] = 1;
 
             return matrix;
 
@@ -361,8 +364,14 @@ namespace PolyhedraLab
         // Поворот вокруг произвольной прямой, заданной двумя точками p1 и p2
         public List<Point> RotationAroundLinePoints(List<Point> vertices, Point p1, Point p2,float degrees)
         {
-            double[,] matrix = RotationLMatrix(p1, p2, degrees);
-            
+            // Прямая проходит через p1, а не через начало координат: переносим p1 в начало, вращаем, возвращаем.
+            double[,] m1 = TranslationMatrix(-p1.X, -p1.Y, -p1.Z);
+            double[,] m2 = RotationLMatrix(p1, p2, degrees);
+            double[,] m3 = TranslationMatrix(p1.X, p1.Y, p1.Z);
+
+            double[,] matrix = MultMatrix(m1, m2);
+            matrix = MultMatrix(matrix, m3);
+
             return TransformPoints(vertices, matrix);
         }
     }
