@@ -21,7 +21,8 @@ namespace PolyhedraLab
         // ----- выбор многогранника -----
         private readonly ComboBox cmbPolyhedron = new ComboBox();
         private readonly Button btnCreate = new Button();
-
+        private readonly Button btnOpen = new Button();
+        private readonly Button btnSave = new Button();
         // ----- проекция -----
         private readonly RadioButton rbAxonometric = new RadioButton();
         private readonly RadioButton rbPerspective = new RadioButton();
@@ -157,6 +158,8 @@ namespace PolyhedraLab
             cmbPolyhedron.SelectedIndex = 0;
             cmbPolyhedron.Width = 170;
             Btn(btnCreate, "Создать / сбросить");
+            Btn(btnOpen, "Открыть OBJ");
+            Btn(btnSave, "Сохранить OBJ");
 
             // --- проекция ---
             rbAxonometric.Text = "Аксонометрическая";
@@ -208,7 +211,8 @@ namespace PolyhedraLab
             stack.Dock = DockStyle.Top;
 
             stack.Controls.Add(Group("Многогранник",
-                Row(cmbPolyhedron, btnCreate)));
+                Row(cmbPolyhedron, btnCreate),
+                Row(btnOpen, btnSave)));
 
             stack.Controls.Add(Group("Проекция",
                 Row(rbAxonometric, rbPerspective),
@@ -275,6 +279,8 @@ namespace PolyhedraLab
         private void WireEvents()
         {
             btnCreate.Click += delegate { CreateSelected(); };
+            btnOpen.Click += delegate { OpenPolyhedron(); };
+            btnSave.Click += delegate { SavePolyhedron(); };
 
             // проекция и вид
             rbAxonometric.CheckedChanged += delegate { ApplyViewSettings(); };
@@ -523,6 +529,92 @@ namespace PolyhedraLab
                 sb.AppendLine("F" + i + ": " + string.Join(", ", _polyhedron.Faces[i].VertexIndices));
 
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// Выбор obj-файла с многогранником 
+        /// </summary>
+        private void OpenPolyhedron()
+        {
+            using (OpenFileDialog dialog = new OpenFileDialog())
+            {
+                dialog.Title = "Открыть многогранник";
+                dialog.Filter = "Wavefront OBJ (*.obj)|*.obj|Все файлы (*.*)|*.*";
+                dialog.DefaultExt = "obj";
+                dialog.CheckFileExists = true;
+
+                if (dialog.ShowDialog() != DialogResult.OK)
+                    return;
+
+                try
+                {
+                    // Загружаем многогранник из файла
+                    _polyhedron = Polyhedron.LoadFromObj(dialog.FileName);
+
+                    // Сбрасываем выбор стандартного многогранника,
+                    // так как теперь загружена произвольная модель
+                    cmbPolyhedron.SelectedIndex = -1;
+
+                    _lastOperation = "Загружен из файла: " +
+                        System.IO.Path.GetFileName(dialog.FileName);
+
+                    RefreshAll();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(
+                        this,
+                        "Не удалось загрузить многогранник:\n" + ex.Message,
+                        "Ошибка загрузки",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                }
+            }
+        }
+        /// <summary>
+        /// Сохранение текущего многогранника в .obj
+        /// </summary>
+        private void SavePolyhedron()
+        {
+            using (SaveFileDialog dialog = new SaveFileDialog())
+            {
+                dialog.Title = "Сохранить многогранник";
+                dialog.Filter = "Wavefront OBJ (*.obj)|*.obj|Все файлы (*.*)|*.*";
+                dialog.DefaultExt = "obj";
+                dialog.AddExtension = true;
+                dialog.OverwritePrompt = true;
+                dialog.FileName = "polyhedron.obj";
+
+                if (dialog.ShowDialog() != DialogResult.OK)
+                    return;
+
+                try
+                {
+                    // Сохраняем текущий многогранник
+                    _polyhedron.SaveToObj(dialog.FileName);
+
+                    _lastOperation = "Сохранён в файл: " +
+                        System.IO.Path.GetFileName(dialog.FileName);
+
+                    RefreshAll();
+
+                    MessageBox.Show(
+                        this,
+                        "Многогранник успешно сохранён.",
+                        "Сохранение",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(
+                        this,
+                        "Не удалось сохранить многогранник:\n" + ex.Message,
+                        "Ошибка сохранения",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                }
+            }
         }
     }
 }

@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Text;
+
 namespace PolyhedraLab;
 
 public sealed class Polyhedron
@@ -136,5 +139,148 @@ public sealed class Polyhedron
         double dot = normalX * centerX + normalY * centerY + normalZ * centerZ;
 
         return new Polygon(dot < 0 ? indices.Reverse() : indices);
+    }
+    /// <summary>
+    /// Загружает многогранник из OBJ-файла.
+    /// </summary>
+    public static Polyhedron LoadFromObj(string filePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+
+        if (!File.Exists(filePath))
+            throw new FileNotFoundException("OBJ-файл не найден.", filePath);
+
+        List<Point> vertices = new();
+        List<Polygon> faces = new();
+
+        string[] lines = File.ReadAllLines(filePath);
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string line = lines[i];
+
+            // Удаляем комментарии.
+            int commentIndex = line.IndexOf('#');
+            if (commentIndex >= 0)
+                line = line.Substring(0, commentIndex);
+
+            string[] parts = line.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+
+            if (parts.Length == 0)
+                continue;
+
+            switch (parts[0])
+            {
+                case "v":
+                    // Вершина: v x y z
+                    if (parts.Length < 4)
+                        throw new FormatException($"Некорректная вершина в строке {i + 1}.");
+
+                    double x = ParseDouble(parts[1]);
+                    double y = ParseDouble(parts[2]);
+                    double z = ParseDouble(parts[3]);
+
+                    vertices.Add(new Point(x, y, z));
+                    break;
+
+                case "f":
+                    // Грань: f v1 v2 v3 ...
+                    if (parts.Length < 4)
+                        throw new FormatException($"Грань должна содержать минимум три вершины. Строка {i + 1}.");
+
+                    List<int> indices = new();
+
+                    for (int j = 1; j < parts.Length; j++)
+                    {
+                       
+                        //Извлекаем только вершину, текстуру и нормаль не трогаем
+                        string vertexIndex = parts[j].Split('/')[0]; 
+
+                        if (!int.TryParse(
+                            vertexIndex,
+                            NumberStyles.Integer,
+                            CultureInfo.InvariantCulture,
+                            out int index))
+                        {
+                            throw new FormatException($"Некорректный индекс вершины в строке {i + 1}.");
+                        }
+
+                        if (index == 0)
+                            throw new FormatException($"Индекс вершины не может быть равен нулю. Строка {i + 1}.");
+
+                        // OBJ использует индексацию с 1.
+                        // Отрицательные индексы отсчитываются от конца списка.
+                        int actualIndex = index > 0? index - 1: vertices.Count + index;
+
+                        if (actualIndex < 0 || actualIndex >= vertices.Count)
+                            throw new FormatException($"Индекс вершины выходит за допустимые границы. Строка {i + 1}.");
+
+                        indices.Add(actualIndex);
+                    }
+
+                    faces.Add(new Polygon(indices));
+                    break;
+            }
+        }
+
+        return new Polyhedron(vertices, faces);
+    }
+
+    /// <summary>
+    /// Преобразует строку в число с учётом формата OBJ.
+    /// </summary>
+    private static double ParseDouble(string value)
+    {
+        if (!double.TryParse(
+            value,
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture,
+            out double result) || !double.IsFinite(result))
+        {
+            throw new FormatException($"Некорректное значение координаты: {value}");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Сохраняет текущий многогранник в OBJ-файл.
+    /// </summary>
+    public void SaveToObj(string filePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+
+        using StreamWriter writer = new StreamWriter(
+            filePath,
+            false,
+            new UTF8Encoding(false));
+
+        writer.WriteLine("# Wavefront OBJ file");
+        writer.WriteLine();
+
+        // Записываем вершины.
+        foreach (Point vertex in Vertices)
+        {
+            writer.WriteLine(
+                $"v {vertex.X.ToString("R", CultureInfo.InvariantCulture)} " +
+                $"{vertex.Y.ToString("R", CultureInfo.InvariantCulture)} " +
+                $"{vertex.Z.ToString("R", CultureInfo.InvariantCulture)}");
+        }
+
+        writer.WriteLine();
+
+        // Записываем грани.
+        foreach (Polygon face in Faces)
+        {
+            writer.Write("f");
+
+            foreach (int index in face.VertexIndices)
+            {
+                // В OBJ индексация начинается с 1.
+                writer.Write($" {index + 1}");
+            }
+
+            writer.WriteLine();
+        }
     }
 }
