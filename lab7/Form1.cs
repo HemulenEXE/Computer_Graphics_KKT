@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
 using System.Text;
 using System.Windows.Forms;
 
@@ -23,6 +24,10 @@ namespace PolyhedraLab
         private readonly Button btnCreate = new Button();
         private readonly Button btnOpen = new Button();
         private readonly Button btnSave = new Button();
+        private readonly TextBox txtGeneratrix = new TextBox();
+        private readonly ComboBox cmbSurfaceAxis = new ComboBox();
+        private readonly NumericUpDown numSurfaceDivisions = Num(32, 3, 512, 0, 1);
+        private readonly Button btnCreateSurface = new Button();
         // ----- проекция -----
         private readonly RadioButton rbAxonometric = new RadioButton();
         private readonly RadioButton rbPerspective = new RadioButton();
@@ -161,6 +166,21 @@ namespace PolyhedraLab
             Btn(btnOpen, "Открыть OBJ");
             Btn(btnSave, "Сохранить OBJ");
 
+            txtGeneratrix.Multiline = true;
+            txtGeneratrix.AcceptsReturn = true;
+            txtGeneratrix.ScrollBars = ScrollBars.Vertical;
+            txtGeneratrix.WordWrap = false;
+            txtGeneratrix.Width = 365;
+            txtGeneratrix.Height = 88;
+            txtGeneratrix.Font = new Font("Consolas", 9);
+            txtGeneratrix.Text = "1 -1 0" + Environment.NewLine + "1 1 0";
+
+            cmbSurfaceAxis.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbSurfaceAxis.Items.AddRange(new object[] { "X", "Y", "Z" });
+            cmbSurfaceAxis.SelectedIndex = 1;
+            cmbSurfaceAxis.Width = 60;
+            Btn(btnCreateSurface, "Построить");
+
             // --- проекция ---
             rbAxonometric.Text = "Аксонометрическая";
             rbAxonometric.AutoSize = true;
@@ -213,6 +233,11 @@ namespace PolyhedraLab
             stack.Controls.Add(Group("Многогранник",
                 Row(cmbPolyhedron, btnCreate),
                 Row(btnOpen, btnSave)));
+
+            stack.Controls.Add(Group("Фигура вращения",
+                Row(Lbl("Точки образующей (x y z, по одной на строку):")),
+                Row(txtGeneratrix),
+                Row(Lbl("Ось:"), cmbSurfaceAxis, Lbl("Разбиений:"), numSurfaceDivisions, btnCreateSurface)));
 
             stack.Controls.Add(Group("Проекция",
                 Row(rbAxonometric, rbPerspective),
@@ -281,6 +306,7 @@ namespace PolyhedraLab
             btnCreate.Click += delegate { CreateSelected(); };
             btnOpen.Click += delegate { OpenPolyhedron(); };
             btnSave.Click += delegate { SavePolyhedron(); };
+            btnCreateSurface.Click += delegate { CreateSurfaceOfRevolution(); };
 
             // проекция и вид
             rbAxonometric.CheckedChanged += delegate { ApplyViewSettings(); };
@@ -387,6 +413,57 @@ namespace PolyhedraLab
 
             _lastOperation = "Создан: " + cmbPolyhedron.Text;
             RefreshAll();
+        }
+
+        private void CreateSurfaceOfRevolution()
+        {
+            try
+            {
+                List<Point> profile = new List<Point>();
+                string[] lines = txtGeneratrix.Text.Split(
+                    new[] { "\r\n", "\n" },
+                    StringSplitOptions.None);
+
+                for (int lineIndex = 0; lineIndex < lines.Length; lineIndex++)
+                {
+                    string line = lines[lineIndex].Trim();
+                    if (line.Length == 0)
+                        continue;
+
+                    string[] coordinates = line.Split(
+                        (char[]?)null,
+                        StringSplitOptions.RemoveEmptyEntries);
+                    if (coordinates.Length != 3)
+                        throw new FormatException($"Строка {lineIndex + 1}: укажите три координаты x y z.");
+
+                    double[] values = new double[3];
+                    for (int coordinateIndex = 0; coordinateIndex < values.Length; coordinateIndex++)
+                    {
+                        string value = coordinates[coordinateIndex];
+                        if ((!double.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out values[coordinateIndex])
+                            && !double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out values[coordinateIndex]))
+                            || !double.IsFinite(values[coordinateIndex]))
+                        {
+                            throw new FormatException($"Строка {lineIndex + 1}: некорректная координата «{value}».");
+                        }
+                    }
+
+                    profile.Add(new Point(values[0], values[1], values[2]));
+                }
+
+                char axis = cmbSurfaceAxis.Text[0];
+                _polyhedron = Polyhedron.CreateSurfaceOfRevolution(
+                    profile,
+                    axis,
+                    (int)numSurfaceDivisions.Value);
+                cmbPolyhedron.SelectedIndex = -1;
+                _lastOperation = $"Построена фигура вращения вокруг оси {axis}, разбиений: {numSurfaceDivisions.Value}";
+                RefreshAll();
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is FormatException)
+            {
+                MessageBox.Show(this, ex.Message, "Ошибка построения", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         // ==================================================================

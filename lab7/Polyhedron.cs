@@ -107,6 +107,188 @@ public sealed class Polyhedron
         return Create(vertices, faces);
     }
 
+    public static Polyhedron CreateSurfaceOfRevolution(
+        IEnumerable<Point> profile,
+        char axis,
+        int divisions)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+
+        axis = char.ToUpperInvariant(axis);
+        if (axis != 'X' && axis != 'Y' && axis != 'Z')
+            throw new ArgumentOutOfRangeException(nameof(axis), "Ось вращения должна быть X, Y или Z.");
+        if (divisions < 3 || divisions > 512)
+            throw new ArgumentOutOfRangeException(nameof(divisions), "Количество разбиений должно быть от 3 до 512.");
+
+        List<Point> profilePoints = profile.ToList();
+        if (profilePoints.Count < 2)
+            throw new ArgumentException("Образующая должна содержать не менее двух точек.", nameof(profile));
+        if (profilePoints.Any(point => point is null))
+            throw new ArgumentException("Образующая не должна содержать null.", nameof(profile));
+        if (profilePoints.Any(point =>
+                !double.IsFinite(point.X) || !double.IsFinite(point.Y) || !double.IsFinite(point.Z)))
+        {
+            throw new ArgumentException("Координаты образующей должны быть конечными числами.", nameof(profile));
+        }
+
+        for (int i = 1; i < profilePoints.Count; i++)
+        {
+            Point previous = profilePoints[i - 1];
+            Point current = profilePoints[i];
+            if (previous.X == current.X && previous.Y == current.Y && previous.Z == current.Z)
+                throw new ArgumentException("Соседние точки образующей не должны совпадать.", nameof(profile));
+        }
+
+        List<Point> vertices = new();
+        List<int[]> rings = new(profilePoints.Count);
+
+        foreach (Point profilePoint in profilePoints)
+        {
+            if (DistanceFromAxis(profilePoint, axis) <= 1e-10)
+            {
+                rings.Add([vertices.Count]);
+                vertices.Add(PointOnAxis(profilePoint, axis));
+                continue;
+            }
+
+            int[] ring = new int[divisions];
+            for (int step = 0; step < divisions; step++)
+            {
+                double angle = 2 * Math.PI * step / divisions;
+                ring[step] = vertices.Count;
+                vertices.Add(RotateAroundAxis(profilePoint, axis, angle));
+            }
+            rings.Add(ring);
+        }
+
+        List<Polygon> faces = new();
+        for (int profileIndex = 0; profileIndex < rings.Count - 1; profileIndex++)
+        {
+            int[] firstRing = rings[profileIndex];
+            int[] secondRing = rings[profileIndex + 1];
+            if (firstRing.Length == 1 && secondRing.Length == 1)
+                continue;
+
+            for (int step = 0; step < divisions; step++)
+            {
+                int next = (step + 1) % divisions;
+                int[] faceIndices = firstRing.Length == 1
+                    ? [firstRing[0], secondRing[step], secondRing[next]]
+                    : secondRing.Length == 1
+                        ? [firstRing[step], secondRing[0], firstRing[next]]
+                        : [firstRing[step], secondRing[step], secondRing[next], firstRing[next]];
+
+                OrientFaceOutward(faceIndices, vertices, axis);
+                faces.Add(new Polygon(faceIndices));
+            }
+        }
+
+        AddEndCap(rings[0], DirectionAlongAxis(profilePoints[0], profilePoints[1], axis) * -1);
+        AddEndCap(
+            rings[rings.Count - 1],
+            DirectionAlongAxis(profilePoints[profilePoints.Count - 2], profilePoints[profilePoints.Count - 1], axis));
+
+        if (faces.Count == 0)
+            throw new ArgumentException("Образующая не задаёт поверхность вращения.", nameof(profile));
+
+        return new Polyhedron(vertices, faces);
+
+        void AddEndCap(int[] ring, double outwardDirection)
+        {
+            if (ring.Length == 1)
+                return;
+
+            int[] cap = outwardDirection < 0
+                ? ring.Reverse().ToArray()
+                : ring.ToArray();
+            faces.Add(new Polygon(cap));
+        }
+    }
+
+    private static double DistanceFromAxis(Point point, char axis) => axis switch
+    {
+        'X' => Hypot(point.Y, point.Z),
+        'Y' => Hypot(point.X, point.Z),
+        _ => Hypot(point.X, point.Y)
+    };
+
+    private static double Hypot(double first, double second)
+    {
+        double largest = Math.Max(Math.Abs(first), Math.Abs(second));
+        if (largest == 0)
+            return 0;
+
+        double scaledFirst = first / largest;
+        double scaledSecond = second / largest;
+        return largest * Math.Sqrt(scaledFirst * scaledFirst + scaledSecond * scaledSecond);
+    }
+
+    private static Point PointOnAxis(Point point, char axis) => axis switch
+    {
+        'X' => new Point(point.X, 0, 0),
+        'Y' => new Point(0, point.Y, 0),
+        _ => new Point(0, 0, point.Z)
+    };
+
+    private static Point RotateAroundAxis(Point point, char axis, double angle)
+    {
+        double cosine = Math.Cos(angle);
+        double sine = Math.Sin(angle);
+
+        return axis switch
+        {
+            'X' => new Point(
+                point.X,
+                point.Y * cosine - point.Z * sine,
+                point.Y * sine + point.Z * cosine),
+            'Y' => new Point(
+                point.X * cosine + point.Z * sine,
+                point.Y,
+                -point.X * sine + point.Z * cosine),
+            _ => new Point(
+                point.X * cosine - point.Y * sine,
+                point.X * sine + point.Y * cosine,
+                point.Z)
+        };
+    }
+
+    private static double DirectionAlongAxis(Point first, Point second, char axis) => axis switch
+    {
+        'X' => second.X - first.X,
+        'Y' => second.Y - first.Y,
+        _ => second.Z - first.Z
+    };
+
+    private static void OrientFaceOutward(int[] indices, List<Point> vertices, char axis)
+    {
+        Point a = vertices[indices[0]];
+        Point b = vertices[indices[1]];
+        Point c = vertices[indices[2]];
+
+        double abX = b.X - a.X;
+        double abY = b.Y - a.Y;
+        double abZ = b.Z - a.Z;
+        double acX = c.X - a.X;
+        double acY = c.Y - a.Y;
+        double acZ = c.Z - a.Z;
+        double normalX = abY * acZ - abZ * acY;
+        double normalY = abZ * acX - abX * acZ;
+        double normalZ = abX * acY - abY * acX;
+
+        double centerX = indices.Average(index => vertices[index].X);
+        double centerY = indices.Average(index => vertices[index].Y);
+        double centerZ = indices.Average(index => vertices[index].Z);
+        double radialDot = axis switch
+        {
+            'X' => normalY * centerY + normalZ * centerZ,
+            'Y' => normalX * centerX + normalZ * centerZ,
+            _ => normalX * centerX + normalY * centerY
+        };
+
+        if (radialDot < 0)
+            Array.Reverse(indices);
+    }
+
     private static Polyhedron Create(Point[] vertices, int[][] faces)
     {
         return new Polyhedron(
@@ -164,7 +346,7 @@ public sealed class Polyhedron
             if (commentIndex >= 0)
                 line = line.Substring(0, commentIndex);
 
-            string[] parts = line.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+            string[] parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
 
             if (parts.Length == 0)
                 continue;
