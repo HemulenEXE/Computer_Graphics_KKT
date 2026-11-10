@@ -25,9 +25,12 @@ namespace PolyhedraLab
         public bool ShowLine { get; set; }
         public Point LineA { get; set; }
         public Point LineB { get; set; }
+        private bool _rotatingCamera;
+        private System.Drawing.Point _lastMousePosition;
 
         /// <summary>Вызывается, когда масштаб изменён колёсиком мыши.</summary>
         public event EventHandler ZoomChanged;
+        public event EventHandler CameraChanged;
 
         public PolyhedronView()
         {
@@ -53,6 +56,59 @@ namespace PolyhedraLab
         {
             base.OnMouseDown(e);
             Focus();                       // чтобы колёсико мыши приходило в это поле
+            if (e.Button == MouseButtons.Middle)
+            {
+                _rotatingCamera = true;
+                _lastMousePosition = e.Location;
+                Capture = true;
+                Cursor = Cursors.SizeAll;
+            }
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            if (!_rotatingCamera || (e.Button & MouseButtons.Middle) == 0)
+                return;
+
+            int deltaX = e.X - _lastMousePosition.X;
+            int deltaY = e.Y - _lastMousePosition.Y;
+            _lastMousePosition = e.Location;
+
+            Settings.Yaw = NormalizeAngle(Settings.Yaw + deltaX * 0.5);
+            Settings.Pitch = Math.Max(-89, Math.Min(89, Settings.Pitch + deltaY * 0.5));
+            Invalidate();
+            CameraChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            if (e.Button == MouseButtons.Middle)
+                StopCameraRotation();
+        }
+
+        protected override void OnMouseCaptureChanged(EventArgs e)
+        {
+            base.OnMouseCaptureChanged(e);
+            if (!Capture)
+                StopCameraRotation();
+        }
+
+        private void StopCameraRotation()
+        {
+            _rotatingCamera = false;
+            Cursor = Cursors.Default;
+        }
+
+        private static double NormalizeAngle(double angle)
+        {
+            angle %= 360;
+            if (angle > 180)
+                angle -= 360;
+            else if (angle < -180)
+                angle += 360;
+            return angle;
         }
 
         protected override void OnMouseWheel(MouseEventArgs e)
@@ -224,12 +280,22 @@ namespace PolyhedraLab
                 : "аксонометрическая";
 
             string text = "Проекция: " + kind
-                + ";  вид: Y " + Settings.Yaw.ToString("0.##") + "°, X " + Settings.Pitch.ToString("0.##") + "°"
+                + ";  камера: Y " + Settings.Yaw.ToString("0.##") + "°, X " + Settings.Pitch.ToString("0.##") + "°"
                 + ";  масштаб " + Settings.Zoom.ToString("0") + " пикс/ед.";
 
             using (Font font = new Font("Segoe UI", 9f))
             {
-                g.DrawString(text, font, Brushes.DimGray, 8, size.Height - 22);
+                Point position = Settings.Camera.Position;
+                Point direction = Settings.Camera.Direction;
+                string cameraInfo = "Позиция: ("
+                    + position.X.ToString("0.##") + ", "
+                    + position.Y.ToString("0.##") + ", "
+                    + position.Z.ToString("0.##") + "); направление: ("
+                    + direction.X.ToString("0.##") + ", "
+                    + direction.Y.ToString("0.##") + ", "
+                    + direction.Z.ToString("0.##") + ")";
+                g.DrawString(text, font, Brushes.DimGray, 8, size.Height - 38);
+                g.DrawString(cameraInfo, font, Brushes.DimGray, 8, size.Height - 22);
             }
         }
     }

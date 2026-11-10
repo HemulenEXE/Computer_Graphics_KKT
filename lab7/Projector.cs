@@ -8,14 +8,15 @@ namespace PolyhedraLab
     public sealed class ViewSettings
     {
         public ProjectionKind Kind = ProjectionKind.Axonometric;
+        public Camera Camera { get; } = new Camera();
 
-        /// <summary>Поворот вида вокруг оси OY, градусы.</summary>
+        /// <summary>Азимут камеры вокруг цели, градусы.</summary>
         public double Yaw = 45.0;
 
-        /// <summary>Поворот вида вокруг оси OX, градусы.</summary>
+        /// <summary>Наклон камеры относительно плоскости XZ, градусы.</summary>
         public double Pitch = 35.264;
 
-        /// <summary>Расстояние от плоскости проекции до камеры (для перспективы).</summary>
+        /// <summary>Расстояние камеры до цели и фокусное расстояние перспективной проекции.</summary>
         public double Distance = 6.0;
 
         /// <summary>Сколько пикселей в одной единице длины.</summary>
@@ -23,6 +24,16 @@ namespace PolyhedraLab
 
         /// <summary>Не рисовать нелицевые (обращённые от зрителя) грани.</summary>
         public bool HideBackFaces = true;
+
+        public ViewSettings()
+        {
+            UpdateCamera();
+        }
+
+        public void UpdateCamera()
+        {
+            Camera.Orbit(Camera.Target, Yaw, Pitch, Distance, Kind);
+        }
     }
 
     /// <summary>Грань после проецирования: готовые экранные точки и вспомогательные данные.</summary>
@@ -66,18 +77,12 @@ namespace PolyhedraLab
             return new double[] { x / len, y / len, z / len };
         }
 
-        private static double[,] ProjectionMatrix(ViewSettings s)
-        {
-            if (s.Kind == ProjectionKind.Perspective)
-                return Projection.Perspective(Math.Max(0.1, s.Distance));
-            return Projection.Orthographic();
-        }
-
         /// <summary>Проекция одной точки пространства (для осей, прямой и т.п.). null — точка за камерой.</summary>
         public static PointF? ProjectPoint(double x, double y, double z, ViewSettings s, PointF origin)
         {
-            double[,] view = Projection.View(s.Yaw, s.Pitch);
-            double[,] proj = ProjectionMatrix(s);
+            s.UpdateCamera();
+            double[,] view = s.Camera.ViewMatrix;
+            double[,] proj = s.Camera.ProjectionMatrix;
             double[] v = Projection.Transform(view, x, y, z);
             return ProjectViewSpace(v[0], v[1], v[2], proj, s, origin);
         }
@@ -115,10 +120,10 @@ namespace PolyhedraLab
             double offsetY,
             double offsetZ)
         {
-            double[,] view = Projection.View(s.Yaw, s.Pitch);
-            double[,] proj = ProjectionMatrix(s);
+            s.UpdateCamera();
+            double[,] view = s.Camera.ViewMatrix;
+            double[,] proj = s.Camera.ProjectionMatrix;
             bool perspective = s.Kind == ProjectionKind.Perspective;
-            double d = Math.Max(0.1, s.Distance);
 
             int n = poly.Vertices.Count;
             double[][] vv = new double[n][];          // вершины в системе координат вида
@@ -170,9 +175,7 @@ namespace PolyhedraLab
 
                     if (perspective)
                     {
-                        // Расстояние от вершины до камеры.
-                        // Камера находится в точке (0, 0, d).
-                        double cameraDistance = d - v[2];
+                        double cameraDistance = -v[2];
 
                         if (cameraDistance <= 0)
                         {
@@ -218,7 +221,7 @@ namespace PolyhedraLab
 
                 bool front;
                 if (perspective)
-                    front = nx * (0 - fx) + ny * (0 - fy) + nz * (d - fz) > 0;   // камера в точке (0, 0, d)
+                    front = nx * -fx + ny * -fy + nz * -fz > 0;
                 else
                     front = nz > 1e-9;                                            // зритель смотрит вдоль −Z
 

@@ -83,15 +83,16 @@ namespace PolyhedraLab
             return m;
         }
 
-        /// <summary>
-        /// Перспектива: центр проекции в точке (0, 0, d), плоскость проекции z = 0.
-        /// В однородных координатах w' = 1 − z/d, после деления на w' удалённые точки становятся меньше.
-        /// </summary>
+        /// <summary>Перспективная проекция для камеры в начале координат, смотрящей вдоль −Z.</summary>
         public static double[,] Perspective(double distance)
         {
-            double[,] m = Identity();
-            m[2, 2] = 0;
-            m[2, 3] = -1.0 / distance;
+            if (!double.IsFinite(distance) || distance <= 0)
+                throw new ArgumentOutOfRangeException(nameof(distance), "Фокусное расстояние должно быть положительным.");
+
+            double[,] m = new double[4, 4];
+            m[0, 0] = distance;
+            m[1, 1] = distance;
+            m[2, 3] = -1;
             return m;
         }
 

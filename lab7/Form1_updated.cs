@@ -14,6 +14,7 @@ namespace PolyhedraLab
         private Polyhedron _polyhedron = Polyhedron.CreateTetrahedron();
         private string _lastOperation = "Создан: Тетраэдр";
         private bool _updatingZoom = false;
+        private bool _updatingCamera = false;
 
         // ----- область рисования и результат -----
         private readonly PolyhedronView _view = new PolyhedronView();
@@ -208,8 +209,10 @@ namespace PolyhedraLab
             chkLabels.Text = "Подписи вершин";
             chkLabels.AutoSize = true;
 
-            Label zoomHint = Lbl("Масштаб: колёсико мыши (после щелчка по рисунку)");
+            Label zoomHint = Lbl("Вращение: зажмите среднюю кнопку мыши и двигайте");
             zoomHint.ForeColor = Color.DimGray;
+            Label orbitHint = Lbl("Масштаб: прокрутка колёсика над рисунком");
+            orbitHint.ForeColor = Color.DimGray;
 
             // --- отражение / оси ---
             cmbPlane.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -254,11 +257,12 @@ namespace PolyhedraLab
 
             stack.Controls.Add(Group("Проекция",
                 Row(rbAxonometric, rbPerspective),
-                Row(Lbl("Вид: поворот Y°"), numYaw, Lbl("X°"), numPitch),
+                Row(Lbl("Камера: азимут Y°"), numYaw, Lbl("наклон X°"), numPitch),
                 Row(Lbl("Расстояние до камеры d"), numDistance, Lbl("Масштаб"), numZoom),
                 Row(chkAxes, chkLabels),
                 Row(chkHideBack),
-                Row(zoomHint)));
+                Row(zoomHint),
+                Row(orbitHint)));
 
             stack.Controls.Add(Group("Смещение",
                 Row(Lbl("dx"), numDx, Lbl("dy"), numDy, Lbl("dz"), numDz),
@@ -394,14 +398,15 @@ namespace PolyhedraLab
             // проекция и вид
             rbAxonometric.CheckedChanged += delegate { ApplyViewSettings(); };
             rbPerspective.CheckedChanged += delegate { ApplyViewSettings(); };
-            numYaw.ValueChanged += delegate { ApplyViewSettings(); };
-            numPitch.ValueChanged += delegate { ApplyViewSettings(); };
+            numYaw.ValueChanged += delegate { if (!_updatingCamera) ApplyViewSettings(); };
+            numPitch.ValueChanged += delegate { if (!_updatingCamera) ApplyViewSettings(); };
             numDistance.ValueChanged += delegate { ApplyViewSettings(); };
             numZoom.ValueChanged += delegate { ApplyViewSettings(); };
             chkAxes.CheckedChanged += delegate { ApplyViewSettings(); };
             chkHideBack.CheckedChanged += delegate { ApplyViewSettings(); };
             chkLabels.CheckedChanged += delegate { ApplyViewSettings(); };
             _view.ZoomChanged += delegate { SyncZoomBox(); };
+            _view.CameraChanged += delegate { SyncCameraBoxes(); };
 
             // преобразования
             btnTranslate.Click += delegate { OnTranslate(); };
@@ -537,6 +542,7 @@ namespace PolyhedraLab
             s.Yaw = (double)numYaw.Value;
             s.Pitch = (double)numPitch.Value;
             s.Distance = (double)numDistance.Value;
+            s.UpdateCamera();
             s.HideBackFaces = chkHideBack.Checked;
 
             if (!_updatingZoom)
@@ -565,6 +571,22 @@ namespace PolyhedraLab
             {
                 _updatingZoom = false;
             }
+        }
+
+        private void SyncCameraBoxes()
+        {
+            _updatingCamera = true;
+            try
+            {
+                numYaw.Value = (decimal)_view.Settings.Yaw;
+                numPitch.Value = (decimal)_view.Settings.Pitch;
+            }
+            finally
+            {
+                _updatingCamera = false;
+            }
+
+            ApplyViewSettings();
         }
 
         private void UpdateRotationLine()
