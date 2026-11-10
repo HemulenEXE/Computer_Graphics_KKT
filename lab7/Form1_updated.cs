@@ -30,6 +30,9 @@ namespace PolyhedraLab
         private readonly NumericUpDown numSurfaceDivisions = Num(32, 3, 512, 0, 1);
         private readonly Button btnCreateSurface = new Button();
 
+        // ----- график функции двух переменных -----
+        private readonly Button btnSurfaceGraph = new Button();
+
         // ----- выбор дополнительных многогранника -----
         private ComboBox cmbSceneObjects;
         private NumericUpDown numOffsetX;
@@ -40,6 +43,7 @@ namespace PolyhedraLab
         private Button btnLoadObj;
         private Polyhedron _loadedModel;
         private string _loadedModelName;
+
         // ----- проекция -----
         private readonly RadioButton rbAxonometric = new RadioButton();
         private readonly RadioButton rbPerspective = new RadioButton();
@@ -177,7 +181,7 @@ namespace PolyhedraLab
             Btn(btnCreate, "Создать / сбросить");
             Btn(btnOpen, "Открыть OBJ");
             Btn(btnSave, "Сохранить OBJ");
-            
+
             txtGeneratrix.Multiline = true;
             txtGeneratrix.AcceptsReturn = true;
             txtGeneratrix.ScrollBars = ScrollBars.Vertical;
@@ -192,6 +196,9 @@ namespace PolyhedraLab
             cmbSurfaceAxis.SelectedIndex = 1;
             cmbSurfaceAxis.Width = 60;
             Btn(btnCreateSurface, "Построить");
+
+            // --- график функции двух переменных ---
+            Btn(btnSurfaceGraph, "Построить график...");
 
             // --- проекция ---
             rbAxonometric.Text = "Аксонометрическая";
@@ -255,6 +262,9 @@ namespace PolyhedraLab
                 Row(txtGeneratrix),
                 Row(Lbl("Ось:"), cmbSurfaceAxis, Lbl("Разбиений:"), numSurfaceDivisions, btnCreateSurface)));
 
+            stack.Controls.Add(Group("График функции z = f(x, y)",
+                Row(btnSurfaceGraph)));
+
             stack.Controls.Add(Group("Проекция",
                 Row(rbAxonometric, rbPerspective),
                 Row(Lbl("Камера: азимут Y°"), numYaw, Lbl("наклон X°"), numPitch),
@@ -317,6 +327,7 @@ namespace PolyhedraLab
             UpdateRotationLine();
             RefreshAll();
         }
+
         private GroupBox InitializeSceneControls()
         {
             cmbSceneObjects = new ComboBox
@@ -388,12 +399,14 @@ namespace PolyhedraLab
                 Value = 0
             };
         }
+
         private void WireEvents()
         {
             btnCreate.Click += delegate { CreateSelected(); };
             btnOpen.Click += delegate { OpenPolyhedron(); };
             btnSave.Click += delegate { SavePolyhedron(); };
             btnCreateSurface.Click += delegate { CreateSurfaceOfRevolution(); };
+            btnSurfaceGraph.Click += delegate { OpenSurfaceDialog(); };
 
             // проекция и вид
             rbAxonometric.CheckedChanged += delegate { ApplyViewSettings(); };
@@ -674,6 +687,24 @@ namespace PolyhedraLab
             }
         }
 
+        /// <summary>
+        /// Открывает диалог построения графика функции двух переменных
+        /// и подставляет полученную модель как текущий многогранник.
+        /// </summary>
+        private void OpenSurfaceDialog()
+        {
+            using (SurfaceDialog dialog = new SurfaceDialog())
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result == null)
+                    return;
+
+                _polyhedron = dialog.Result;
+                cmbPolyhedron.SelectedIndex = -1;
+                _lastOperation = "Построен график функции двух переменных";
+                RefreshAll();
+            }
+        }
+
         // ==================================================================
         //  Преобразования (сами матрицы — в MatrixOperations)
         // ==================================================================
@@ -817,7 +848,7 @@ namespace PolyhedraLab
         }
 
         /// <summary>
-        /// Выбор obj-файла с многогранником 
+        /// Выбор obj-файла с многогранником
         /// </summary>
         private void OpenPolyhedron()
         {
@@ -856,6 +887,7 @@ namespace PolyhedraLab
                 }
             }
         }
+
         /// <summary>
         /// Сохранение текущего многогранника в .obj
         /// </summary>
@@ -902,5 +934,4 @@ namespace PolyhedraLab
             }
         }
     }
-
 }
