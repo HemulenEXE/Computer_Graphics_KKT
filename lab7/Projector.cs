@@ -33,6 +33,12 @@ namespace PolyhedraLab
         public double Brightness;   // 0..1, освещённость грани
         public bool IsFront;        // обращена ли грань к зрителю
         public double Depth;        // глубина центра грани (чем больше, тем ближе к зрителю)
+
+        // Значение глубины для каждой вершины.
+        public double[] DepthValues = new double[0];
+
+        // Тип проекции, использованный при вычислении глубины.
+        public bool IsPerspective;
     }
 
     public sealed class ProjectedPolyhedron
@@ -90,7 +96,24 @@ namespace PolyhedraLab
             return new PointF((float)(origin.X + x * s.Zoom), (float)(origin.Y - y * s.Zoom));
         }
 
-        public static ProjectedPolyhedron Project(Polyhedron poly, ViewSettings s, PointF origin)
+        public static ProjectedPolyhedron Project(
+            Polyhedron polyhedron,
+            ViewSettings settings,
+            PointF origin)
+        {
+            return Project(
+                    polyhedron,
+                    settings,
+                    origin,
+                    0, 0, 0);
+        }
+        public static ProjectedPolyhedron Project(
+            Polyhedron poly,
+            ViewSettings s,
+            PointF origin,
+            double offsetX,
+            double offsetY,
+            double offsetZ)
         {
             double[,] view = Projection.View(s.Yaw, s.Pitch);
             double[,] proj = ProjectionMatrix(s);
@@ -104,7 +127,10 @@ namespace PolyhedraLab
             for (int i = 0; i < n; i++)
             {
                 Point p = poly.Vertices[i];
-                double[] t = Projection.Transform(view, p.X, p.Y, p.Z);
+                double[] t = Projection.Transform(view,
+                                                  p.X + offsetX,
+                                                  p.Y + offsetY,
+                                                  p.Z + offsetZ);
                 vv[i] = t;
                 cx += t[0]; cy += t[1]; cz += t[2];
             }
@@ -121,12 +147,48 @@ namespace PolyhedraLab
                 int k = idx.Count;
 
                 PointF[] pts = new PointF[k];
+                //Добавляем вычисление глубины для каждой вершины
+                double[] depthValues = new double[k];
+
                 bool ok = true;
+
                 for (int j = 0; j < k; j++)
                 {
-                    PointF? pf = result.Vertices[idx[j]];
-                    if (!pf.HasValue) { ok = false; break; }
+                    int vertexIndex = idx[j];
+
+                    PointF? pf = result.Vertices[vertexIndex];
+
+                    if (!pf.HasValue)
+                    {
+                        ok = false;
+                        break;
+                    }
+
                     pts[j] = pf.Value;
+
+                    double[] v = vv[vertexIndex];
+
+                    if (perspective)
+                    {
+                        // Расстояние от вершины до камеры.
+                        // Камера находится в точке (0, 0, d).
+                        double cameraDistance = d - v[2];
+
+                        if (cameraDistance <= 0)
+                        {
+                            ok = false;
+                            break;
+                        }
+
+                        // Обратная глубина. Линейно интерполируется в экранном пространстве.
+                        depthValues[j] = 1.0 / cameraDistance;
+                    }
+                    else
+                    {
+                        // В параллельной проекции: большая координата Z означает более близкую точку.
+                        // Поэтому используем -Z.
+                        depthValues[j] = -v[2];
+                    }
                 }
                 if (!ok) continue;
 
@@ -169,6 +231,8 @@ namespace PolyhedraLab
                 face.Points = pts;
                 face.IsFront = front;
                 face.Depth = fz;
+                face.DepthValues = depthValues;
+                face.IsPerspective = perspective;
                 face.Brightness = 0.35 + 0.65 * Math.Max(0.0, light);
                 result.Faces.Add(face);
             }

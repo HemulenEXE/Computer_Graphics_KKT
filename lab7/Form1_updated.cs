@@ -28,6 +28,17 @@ namespace PolyhedraLab
         private readonly ComboBox cmbSurfaceAxis = new ComboBox();
         private readonly NumericUpDown numSurfaceDivisions = Num(32, 3, 512, 0, 1);
         private readonly Button btnCreateSurface = new Button();
+
+        // ----- выбор дополнительных многогранника -----
+        private ComboBox cmbSceneObjects;
+        private NumericUpDown numOffsetX;
+        private NumericUpDown numOffsetY;
+        private NumericUpDown numOffsetZ;
+        private Button btnAddObject;
+        private Button btnRemoveObject;
+        private Button btnLoadObj;
+        private Polyhedron _loadedModel;
+        private string _loadedModelName;
         // ----- проекция -----
         private readonly RadioButton rbAxonometric = new RadioButton();
         private readonly RadioButton rbPerspective = new RadioButton();
@@ -165,7 +176,7 @@ namespace PolyhedraLab
             Btn(btnCreate, "Создать / сбросить");
             Btn(btnOpen, "Открыть OBJ");
             Btn(btnSave, "Сохранить OBJ");
-
+            
             txtGeneratrix.Multiline = true;
             txtGeneratrix.AcceptsReturn = true;
             txtGeneratrix.ScrollBars = ScrollBars.Vertical;
@@ -234,6 +245,8 @@ namespace PolyhedraLab
                 Row(cmbPolyhedron, btnCreate),
                 Row(btnOpen, btnSave)));
 
+            stack.Controls.Add(InitializeSceneControls());
+
             stack.Controls.Add(Group("Фигура вращения",
                 Row(Lbl("Точки образующей (x y z, по одной на строку):")),
                 Row(txtGeneratrix),
@@ -300,7 +313,77 @@ namespace PolyhedraLab
             UpdateRotationLine();
             RefreshAll();
         }
+        private GroupBox InitializeSceneControls()
+        {
+            cmbSceneObjects = new ComboBox
+            {
+                Width = 350,
+                DropDownStyle = ComboBoxStyle.DropDownList
+            };
 
+            numOffsetX = CreateOffsetControl();
+            numOffsetY = CreateOffsetControl();
+            numOffsetZ = CreateOffsetControl();
+
+            btnLoadObj = new Button
+            {
+                Text = "Загрузить OBJ",
+                AutoSize = true,
+                Margin = new Padding(2)
+            };
+
+            btnAddObject = new Button
+            {
+                Text = "Добавить на сцену",
+                AutoSize = true,
+                Margin = new Padding(2)
+            };
+
+            btnRemoveObject = new Button
+            {
+                Text = "Удалить выбранный",
+                AutoSize = true,
+                Margin = new Padding(2)
+            };
+
+            Label lblLoadedModel = new Label
+            {
+                Text = "Модель не загружена",
+                AutoSize = true,
+                ForeColor = Color.DimGray,
+                MaximumSize = new Size(350, 0)
+            };
+
+            btnLoadObj.Click += delegate
+            {
+                LoadAdditionalModel(lblLoadedModel);
+            };
+            btnAddObject.Click += delegate { AddObjectToScene(); };
+            btnRemoveObject.Click += delegate { RemoveSelectedSceneObject(); };
+
+            return Group("Объекты сцены",
+                Row(Lbl("Загруженная модель:"), lblLoadedModel),
+                Row(btnLoadObj),
+                Row(Lbl("Смещение X:"), numOffsetX),
+                Row(Lbl("Смещение Y:"), numOffsetY),
+                Row(Lbl("Смещение Z:"), numOffsetZ),
+                Row(btnAddObject),
+                Row(Lbl("Добавленные объекты:"), cmbSceneObjects),
+                Row(btnRemoveObject));
+        }
+
+        private NumericUpDown CreateOffsetControl()
+        {
+            return new NumericUpDown
+            {
+                Width = 90,
+                Minimum = -10000,
+                Maximum = 10000,
+                DecimalPlaces = 1,
+                Increment = 10,
+                Value = 0
+            };
+        }
         private void WireEvents()
         {
             btnCreate.Click += delegate { CreateSelected(); };
@@ -337,6 +420,109 @@ namespace PolyhedraLab
             numBx.ValueChanged += delegate { UpdateRotationLine(); };
             numBy.ValueChanged += delegate { UpdateRotationLine(); };
             numBz.ValueChanged += delegate { UpdateRotationLine(); };
+        }
+
+        private void LoadAdditionalModel(Label loadedModelLabel)
+        {
+            using (OpenFileDialog dialog = new OpenFileDialog())
+            {
+                dialog.Title = "Загрузить дополнительный многогранник";
+                dialog.Filter = "Wavefront OBJ (*.obj)|*.obj|Все файлы (*.*)|*.*";
+                dialog.DefaultExt = "obj";
+                dialog.CheckFileExists = true;
+
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                    return;
+
+                try
+                {
+                    _loadedModel = Polyhedron.LoadFromObj(dialog.FileName);
+                    _loadedModelName = System.IO.Path.GetFileNameWithoutExtension(
+                        dialog.FileName);
+
+                    loadedModelLabel.Text = _loadedModelName;
+                    loadedModelLabel.ForeColor = SystemColors.ControlText;
+
+                    // Устанавливаем нулевые смещения для новой модели.
+                    numOffsetX.Value = 0;
+                    numOffsetY.Value = 0;
+                    numOffsetZ.Value = 0;
+                }
+                catch (Exception ex)
+                {
+                    _loadedModel = null;
+                    _loadedModelName = null;
+
+                    loadedModelLabel.Text = "Модель не загружена";
+                    loadedModelLabel.ForeColor = Color.DimGray;
+
+                    MessageBox.Show(
+                        this,
+                        "Не удалось загрузить OBJ-файл:\n" + ex.Message,
+                        "Ошибка загрузки",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                }
+            }
+        }
+
+        private void AddObjectToScene()
+        {
+            if (_loadedModel == null)
+            {
+                MessageBox.Show(
+                    this,
+                    "Сначала загрузите OBJ-файл.",
+                    "Модель не выбрана",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            SceneObject sceneObject = new SceneObject(
+                _loadedModel,
+                _loadedModelName,
+                (double)numOffsetX.Value,
+                (double)numOffsetY.Value,
+                (double)numOffsetZ.Value);
+
+            _view.AdditionalModels.Add(sceneObject);
+
+            RefreshSceneObjectList();
+            _view.Invalidate();
+        }
+
+        private void RemoveSelectedSceneObject()
+        {
+            SceneObject selected = cmbSceneObjects.SelectedItem as SceneObject;
+
+            if (selected == null)
+                return;
+
+            // Удаляем именно выбранный экземпляр, а не объект с таким же именем.
+            _view.AdditionalModels.Remove(selected);
+
+            RefreshSceneObjectList();
+            _view.Invalidate();
+        }
+
+        private void RefreshSceneObjectList()
+        {
+            cmbSceneObjects.BeginUpdate();
+            try
+            {
+                cmbSceneObjects.Items.Clear();
+
+                foreach (SceneObject sceneObject in _view.AdditionalModels)
+                    cmbSceneObjects.Items.Add(sceneObject);
+
+                if (cmbSceneObjects.Items.Count > 0)
+                    cmbSceneObjects.SelectedIndex = cmbSceneObjects.Items.Count - 1;
+            }
+            finally
+            {
+                cmbSceneObjects.EndUpdate();
+            }
         }
 
         // ==================================================================
@@ -694,4 +880,5 @@ namespace PolyhedraLab
             }
         }
     }
+
 }

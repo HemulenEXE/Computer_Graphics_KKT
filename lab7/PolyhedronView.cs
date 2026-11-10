@@ -14,7 +14,8 @@ namespace PolyhedraLab
     {
         /// <summary>Рисуемый многогранник (может быть null).</summary>
         public Polyhedron Model { get; set; }
-
+        ///<summary> Добавочные модели </summary>
+        public List<SceneObject> AdditionalModels { get; set; } = new List<SceneObject>();
         public ViewSettings Settings { get; private set; }
 
         public bool ShowAxes { get; set; }
@@ -67,63 +68,67 @@ namespace PolyhedraLab
         }
 
         /// <summary>Рисует всю сцену. Вынесено отдельно, чтобы можно было рисовать и не в окне (например, в картинку).</summary>
+
         public void Render(Graphics g, Size size)
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.Clear(BackColor);
 
-            PointF origin = new PointF(size.Width / 2f, size.Height / 2f);
+            PointF origin = new PointF(
+                size.Width / 2f,
+                size.Height / 2f);
 
+            // Оси остаются под объектом.
             if (ShowAxes)
                 DrawAxes(g, origin);
+            List<ProjectedFace> allFaces = new List<ProjectedFace>();
 
+            // Проецируем основной многогранник.
             if (Model != null)
             {
-                ProjectedPolyhedron projected = Projector.Project(Model, Settings, origin);
-                DrawFaces(g, projected);
+                ProjectedPolyhedron projected =
+                    Projector.Project(Model, Settings, origin);
 
+                allFaces.AddRange(projected.Faces);
+                
+                // Подписи остаются поверх изображения.
                 if (ShowVertexLabels)
                     DrawVertexLabels(g, projected);
+            }
+
+            // Проецируем дополнительные многогранники.
+            foreach (SceneObject obj in AdditionalModels)
+            {
+                if (obj?.Model == null)
+                    continue;
+
+                ProjectedPolyhedron projected =
+                    Projector.Project(
+                        obj.Model,
+                        Settings,
+                        origin,
+                        obj.OffsetX,
+                        obj.OffsetY,
+                        obj.OffsetZ);
+
+                allFaces.AddRange(projected.Faces);
+            }
+
+            // Один общий Z-буфер для всех граней.
+            using (Bitmap image = ZBufferRenderer.Render(
+                allFaces,
+                size.Width,
+                size.Height,
+                Color.SteelBlue,
+                Color.FromArgb(40, 40, 70)))
+            {
+                g.DrawImageUnscaled(image, 0, 0);
             }
 
             if (ShowLine)
                 DrawRotationLine(g, origin);
 
             DrawInfo(g, size);
-        }
-
-        // ------------------------------------------------------------------
-
-        private void DrawFaces(Graphics g, ProjectedPolyhedron projected)
-        {
-            Color baseColor = Color.SteelBlue;
-            bool solid = Settings.HideBackFaces;     // с отсечением — непрозрачные грани, без — полупрозрачные
-
-            using (Pen outline = new Pen(Color.FromArgb(40, 40, 70), 1.8f))
-            {
-                outline.LineJoin = LineJoin.Round;
-
-                foreach (ProjectedFace face in projected.Faces)
-                {
-                    int r = Clamp255(baseColor.R * face.Brightness);
-                    int gr = Clamp255(baseColor.G * face.Brightness);
-                    int b = Clamp255(baseColor.B * face.Brightness);
-                    int alpha = solid ? 255 : 90;
-
-                    using (Brush fill = new SolidBrush(Color.FromArgb(alpha, r, gr, b)))
-                    {
-                        g.FillPolygon(fill, face.Points);
-                    }
-                    g.DrawPolygon(outline, face.Points);
-                }
-            }
-        }
-
-        private static int Clamp255(double value)
-        {
-            if (value < 0) return 0;
-            if (value > 255) return 255;
-            return (int)value;
         }
 
         private void DrawVertexLabels(Graphics g, ProjectedPolyhedron projected)
