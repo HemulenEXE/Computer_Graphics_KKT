@@ -54,6 +54,11 @@ namespace PolyhedraLab
         private readonly CheckBox chkAxes = new CheckBox();
         private readonly CheckBox chkHideBack = new CheckBox();
         private readonly CheckBox chkLabels = new CheckBox();
+        private readonly CheckBox chkWireframe = new CheckBox();
+        private readonly CheckBox chkNormals = new CheckBox();
+        private readonly CheckBox chkAutoRotate = new CheckBox();
+        private readonly System.Windows.Forms.Timer _rotationTimer = new() { Interval = 33 };
+        private readonly System.Diagnostics.Stopwatch _rotationClock = new();
 
         // ----- смещение -----
         private readonly NumericUpDown numDx = Num(0, -100, 100, 2, 0.5m);
@@ -175,7 +180,7 @@ namespace PolyhedraLab
 
             // --- многогранник ---
             cmbPolyhedron.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbPolyhedron.Items.AddRange(new object[] { "Тетраэдр", "Гексаэдр (куб)", "Октаэдр" });
+            cmbPolyhedron.Items.AddRange(new object[] { "Тетраэдр", "Гексаэдр (куб)", "Октаэдр", "Шар" });
             cmbPolyhedron.SelectedIndex = 0;
             cmbPolyhedron.Width = 170;
             Btn(btnCreate, "Создать / сбросить");
@@ -215,6 +220,13 @@ namespace PolyhedraLab
             chkHideBack.Checked = true;
             chkLabels.Text = "Подписи вершин";
             chkLabels.AutoSize = true;
+
+            chkWireframe.Text = "Каркас (без Z-буфера)";
+            chkWireframe.AutoSize = true;
+            chkNormals.Text = "Нормали граней";
+            chkNormals.AutoSize = true;
+            chkAutoRotate.Text = "Вращать объект вокруг Y";
+            chkAutoRotate.AutoSize = true;
 
             Label zoomHint = Lbl("Вращение: зажмите среднюю кнопку мыши и двигайте");
             zoomHint.ForeColor = Color.DimGray;
@@ -271,6 +283,8 @@ namespace PolyhedraLab
                 Row(Lbl("Расстояние до камеры d"), numDistance, Lbl("Масштаб"), numZoom),
                 Row(chkAxes, chkLabels),
                 Row(chkHideBack),
+                Row(chkWireframe, chkNormals),
+                Row(chkAutoRotate),
                 Row(zoomHint),
                 Row(orbitHint)));
 
@@ -418,6 +432,23 @@ namespace PolyhedraLab
             chkAxes.CheckedChanged += delegate { ApplyViewSettings(); };
             chkHideBack.CheckedChanged += delegate { ApplyViewSettings(); };
             chkLabels.CheckedChanged += delegate { ApplyViewSettings(); };
+            chkWireframe.CheckedChanged += delegate { ApplyViewSettings(); };
+            chkNormals.CheckedChanged += delegate { ApplyViewSettings(); };
+            chkAutoRotate.CheckedChanged += delegate
+            {
+                if (chkAutoRotate.Checked)
+                {
+                    _rotationClock.Restart();
+                    _rotationTimer.Start();
+                }
+                else
+                {
+                    _rotationTimer.Stop();
+                    _rotationClock.Reset();
+                    RefreshAll();
+                }
+            };
+            _rotationTimer.Tick += delegate { AnimateObject(); };
             _view.ZoomChanged += delegate { SyncZoomBox(); };
             _view.CameraChanged += delegate { SyncCameraBoxes(); };
 
@@ -566,6 +597,8 @@ namespace PolyhedraLab
 
             _view.ShowAxes = chkAxes.Checked;
             _view.ShowVertexLabels = chkLabels.Checked;
+            _view.Wireframe = chkWireframe.Checked;
+            _view.ShowNormals = chkNormals.Checked;
             _view.Invalidate();
         }
 
@@ -626,6 +659,9 @@ namespace PolyhedraLab
                     break;
                 case 2:
                     _polyhedron = Polyhedron.CreateOctahedron();
+                    break;
+                case 3:
+                    _polyhedron = Polyhedron.CreateSphere();
                     break;
                 default:
                     MessageBox.Show(this, "Выберите многогранник.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -803,9 +839,32 @@ namespace PolyhedraLab
 
         private void RefreshAll()
         {
+            _polyhedron.UpdateFaceNormals();
             _view.Model = _polyhedron;
             _view.Invalidate();
             txtResult.Text = BuildReport();
+        }
+
+        private void AnimateObject()
+        {
+            // Скорость 45 градусов в секунду; длительные паузы не вызывают скачок.
+            float angle = (float)(45 * Math.Min(_rotationClock.Elapsed.TotalSeconds, 0.1));
+            _rotationClock.Restart();
+            List<Point> vertices = _polyhedron.Vertices;
+            Point center = new(vertices.Average(p => p.X), vertices.Average(p => p.Y), vertices.Average(p => p.Z));
+            List<Point> rotated = _ops.RotationPoints(vertices, center, 'Y', angle);
+            vertices.Clear();
+            vertices.AddRange(rotated);
+            _polyhedron.UpdateFaceNormals();
+            _lastOperation = "Автовращение объекта вокруг Y через центр (45°/с)";
+            _view.Invalidate();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                _rotationTimer.Dispose();
+            base.Dispose(disposing);
         }
 
         private static string Fmt(double value)
@@ -842,7 +901,11 @@ namespace PolyhedraLab
             sb.AppendLine("Грани:");
 
             for (int i = 0; i < _polyhedron.Faces.Count; i++)
-                sb.AppendLine("F" + i + ": " + string.Join(", ", _polyhedron.Faces[i].VertexIndices));
+            {
+                Polygon face = _polyhedron.Faces[i];
+                sb.AppendLine("F" + i + ": " + string.Join(", ", face.VertexIndices)
+                    + "; N = (" + Fmt(face.Normal.X) + "; " + Fmt(face.Normal.Y) + "; " + Fmt(face.Normal.Z) + ")");
+            }
 
             return sb.ToString();
         }

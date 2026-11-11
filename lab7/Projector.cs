@@ -50,6 +50,9 @@ namespace PolyhedraLab
 
         // Тип проекции, использованный при вычислении глубины.
         public bool IsPerspective;
+
+        public PointF? NormalStart;
+        public PointF? NormalEnd;
     }
 
     public sealed class ProjectedPolyhedron
@@ -121,13 +124,13 @@ namespace PolyhedraLab
             double offsetZ)
         {
             s.UpdateCamera();
+            poly.UpdateFaceNormals();
             double[,] view = s.Camera.ViewMatrix;
             double[,] proj = s.Camera.ProjectionMatrix;
             bool perspective = s.Kind == ProjectionKind.Perspective;
 
             int n = poly.Vertices.Count;
             double[][] vv = new double[n][];          // вершины в системе координат вида
-            double cx = 0, cy = 0, cz = 0;            // центр многогранника в той же системе
 
             for (int i = 0; i < n; i++)
             {
@@ -137,9 +140,7 @@ namespace PolyhedraLab
                                                   p.Y + offsetY,
                                                   p.Z + offsetZ);
                 vv[i] = t;
-                cx += t[0]; cy += t[1]; cz += t[2];
             }
-            cx /= n; cy /= n; cz /= n;
 
             ProjectedPolyhedron result = new ProjectedPolyhedron();
             result.Vertices = new PointF?[n];
@@ -148,7 +149,29 @@ namespace PolyhedraLab
 
             for (int f = 0; f < poly.Faces.Count; f++)
             {
-                IReadOnlyList<int> idx = poly.Faces[f].VertexIndices;
+                Polygon polygon = poly.Faces[f];
+                Point normal = polygon.Normal;
+                if (normal.X == 0 && normal.Y == 0 && normal.Z == 0)
+                    continue;
+
+                Point center = polygon.Center;
+                // Вектор ОТ наблюдателя К грани. В параллельной проекции общий
+                // для всех граней, в перспективной зависит от положения грани.
+                Point direction = perspective
+                    ? new Point(center.X + offsetX - s.Camera.Position.X,
+                                center.Y + offsetY - s.Camera.Position.Y,
+                                center.Z + offsetZ - s.Camera.Position.Z)
+                    : s.Camera.Direction;
+                double directionLength = Math.Sqrt(direction.X * direction.X
+                    + direction.Y * direction.Y + direction.Z * direction.Z);
+                double dot = normal.X * direction.X + normal.Y * direction.Y + normal.Z * direction.Z;
+                bool front = dot < -1e-9 * directionLength;
+
+                // Отбрасываем нелицевую грань до передачи в Z-буфер.
+                if (s.HideBackFaces && !front)
+                    continue;
+
+                IReadOnlyList<int> idx = polygon.VertexIndices;
                 int k = idx.Count;
 
                 PointF[] pts = new PointF[k];
@@ -195,37 +218,11 @@ namespace PolyhedraLab
                 }
                 if (!ok) continue;
 
-                // Нормаль грани (метод Ньюэлла) и центр грани в системе вида.
-                double nx = 0, ny = 0, nz = 0, fx = 0, fy = 0, fz = 0;
-                for (int j = 0; j < k; j++)
-                {
-                    double[] a = vv[idx[j]];
-                    double[] b = vv[idx[(j + 1) % k]];
-                    nx += (a[1] - b[1]) * (a[2] + b[2]);
-                    ny += (a[2] - b[2]) * (a[0] + b[0]);
-                    nz += (a[0] - b[0]) * (a[1] + b[1]);
-                    fx += a[0]; fy += a[1]; fz += a[2];
-                }
-                fx /= k; fy /= k; fz /= k;
-
-                double len = Math.Sqrt(nx * nx + ny * ny + nz * nz);
-                if (len < 1e-12) continue;
-                nx /= len; ny /= len; nz /= len;
-
-                // Делаем нормаль «наружу» (от центра многогранника). Это не зависит от порядка обхода вершин,
-                // поэтому остаётся верным и после отражения, когда порядок обхода «переворачивается».
-                if (nx * (fx - cx) + ny * (fy - cy) + nz * (fz - cz) < 0)
-                {
-                    nx = -nx; ny = -ny; nz = -nz;
-                }
-
-                bool front;
-                if (perspective)
-                    front = nx * -fx + ny * -fy + nz * -fz > 0;
-                else
-                    front = nz > 1e-9;                                            // зритель смотрит вдоль −Z
-
-                if (s.HideBackFaces && !front) continue;
+                // Нормаль поворачиваем в систему камеры без переноса.
+                double nx = normal.X * view[0, 0] + normal.Y * view[1, 0] + normal.Z * view[2, 0];
+                double ny = normal.X * view[0, 1] + normal.Y * view[1, 1] + normal.Z * view[2, 1];
+                double nz = normal.X * view[0, 2] + normal.Y * view[1, 2] + normal.Z * view[2, 2];
+                double[] fc = Projection.Transform(view, center.X + offsetX, center.Y + offsetY, center.Z + offsetZ);
 
                 double light = nx * LightDirection[0] + ny * LightDirection[1] + nz * LightDirection[2];
 
@@ -233,10 +230,12 @@ namespace PolyhedraLab
                 face.Index = f;
                 face.Points = pts;
                 face.IsFront = front;
-                face.Depth = fz;
+                face.Depth = fc[2];
                 face.DepthValues = depthValues;
                 face.IsPerspective = perspective;
                 face.Brightness = 0.35 + 0.65 * Math.Max(0.0, light);
+                face.NormalStart = ProjectViewSpace(fc[0], fc[1], fc[2], proj, s, origin);
+                face.NormalEnd = ProjectViewSpace(fc[0] + nx * 0.35, fc[1] + ny * 0.35, fc[2] + nz * 0.35, proj, s, origin);
                 result.Faces.Add(face);
             }
 

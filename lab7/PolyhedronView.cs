@@ -20,6 +20,8 @@ namespace PolyhedraLab
 
         public bool ShowAxes { get; set; }
         public bool ShowVertexLabels { get; set; }
+        public bool Wireframe { get; set; }
+        public bool ShowNormals { get; set; }
 
         /// <summary>Прямая для поворота (две точки A и B). Рисуется пунктиром, если ShowLine = true.</summary>
         public bool ShowLine { get; set; }
@@ -170,21 +172,39 @@ namespace PolyhedraLab
                 allFaces.AddRange(projected.Faces);
             }
 
-            // Один общий Z-буфер для всех граней.
-            using (Bitmap image = ZBufferRenderer.Render(
-                allFaces,
-                size.Width,
-                size.Height,
-                Color.SteelBlue,
-                Color.FromArgb(40, 40, 70)))
+            if (Wireframe)
             {
-                g.DrawImageUnscaled(image, 0, 0);
+                // Без заливки и Z-буфера виден эффект именно отсечения граней.
+                using (Pen pen = new Pen(Color.FromArgb(40, 40, 70), 1.4f))
+                    foreach (ProjectedFace face in allFaces)
+                        g.DrawPolygon(pen, face.Points);
+            }
+            else
+            {
+                // Один общий Z-буфер для всех граней.
+                using (Bitmap image = ZBufferRenderer.Render(
+                    allFaces, size.Width, size.Height,
+                    Color.SteelBlue, Color.FromArgb(40, 40, 70)))
+                    g.DrawImageUnscaled(image, 0, 0);
+            }
+
+            if (ShowNormals)
+            {
+                using (Pen pen = new Pen(Color.DarkOrange, 1.6f))
+                {
+                    pen.EndCap = LineCap.ArrowAnchor;
+                    foreach (ProjectedFace face in allFaces)
+                        if (face.NormalStart.HasValue && face.NormalEnd.HasValue)
+                            g.DrawLine(pen, face.NormalStart.Value, face.NormalEnd.Value);
+                }
             }
 
             if (ShowLine)
                 DrawRotationLine(g, origin);
 
-            DrawInfo(g, size);
+            int totalFaces = (Model?.Faces.Count ?? 0)
+                + AdditionalModels.Where(obj => obj?.Model != null).Sum(obj => obj.Model.Faces.Count);
+            DrawInfo(g, size, allFaces.Count, totalFaces);
         }
 
         private void DrawVertexLabels(Graphics g, ProjectedPolyhedron projected)
@@ -273,7 +293,7 @@ namespace PolyhedraLab
             }
         }
 
-        private void DrawInfo(Graphics g, Size size)
+        private void DrawInfo(Graphics g, Size size, int drawnFaces, int totalFaces)
         {
             string kind = Settings.Kind == ProjectionKind.Perspective
                 ? "перспективная (d = " + Settings.Distance.ToString("0.##") + ")"
@@ -296,6 +316,9 @@ namespace PolyhedraLab
                     + direction.Z.ToString("0.##") + ")";
                 g.DrawString(text, font, Brushes.DimGray, 8, size.Height - 38);
                 g.DrawString(cameraInfo, font, Brushes.DimGray, 8, size.Height - 22);
+                g.DrawString("Граней передано на отрисовку: " + drawnFaces + " / " + totalFaces
+                    + "; отсечение: " + (Settings.HideBackFaces ? "вкл." : "выкл."),
+                    font, Brushes.DimGray, 8, size.Height - 54);
             }
         }
     }

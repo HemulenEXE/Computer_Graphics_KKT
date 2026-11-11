@@ -30,6 +30,27 @@ public sealed class Polyhedron
             if (face.VertexIndices.Any(i => i < 0 || i >= Vertices.Count))
                 throw new ArgumentException("Грань содержит недопустимый индекс вершины.", nameof(faces));
         }
+
+        UpdateFaceNormals();
+    }
+
+    /// <summary>Пересчитывает нормали по текущим вершинам после преобразования модели.</summary>
+    public void UpdateFaceNormals()
+    {
+        Point center = new(
+            Vertices.Average(p => p.X),
+            Vertices.Average(p => p.Y),
+            Vertices.Average(p => p.Z));
+        foreach (Polygon face in Faces)
+            face.UpdateNormal(Vertices, center);
+    }
+
+    public static Polyhedron CreateSphere()
+    {
+        Point[] profile = Enumerable.Range(0, 17)
+            .Select(i => new Point(Math.Sin(Math.PI * i / 16), Math.Cos(Math.PI * i / 16), 0))
+            .ToArray();
+        return CreateSurfaceOfRevolution(profile, 'Y', 32);
     }
 
     public static Polyhedron CreateTetrahedron()
