@@ -1,4 +1,4 @@
-﻿
+
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -52,8 +52,9 @@ namespace PolyhedraLab
                     face.Points.Length != face.DepthValues.Length)
                     continue;
 
-                Color fillColor = Shade(
-                    baseColor, face.Brightness);
+                if (face.VertexBrightness == null ||
+                    face.VertexBrightness.Length != face.Points.Length)
+                    continue;
 
                 // Разбиваем выпуклый полигон на треугольники.
                 // Вершины: 0,1,2; 0,2,3; 0,3,4...
@@ -72,7 +73,10 @@ namespace PolyhedraLab
                         face.DepthValues[i],
                         face.DepthValues[i + 1],
                         face.IsPerspective,
-                        fillColor);
+                        baseColor,
+                        face.VertexBrightness[0],
+                        face.VertexBrightness[i],
+                        face.VertexBrightness[i + 1]);
                 }
 
                 // Рисуем только внешние рёбра грани.
@@ -109,7 +113,10 @@ namespace PolyhedraLab
             double d1,
             double d2,
             bool perspective,
-            Color color)
+            Color baseColor,
+            double brightness0,
+            double brightness1,
+            double brightness2)
         {
             int width = bitmap.Width;
             int height = bitmap.Height;
@@ -189,7 +196,19 @@ namespace PolyhedraLab
                     if (depth < zBuffer[x, y])
                     {
                         zBuffer[x, y] = depth;
-                        bitmap.SetPixel(x, y, color);
+                        // Интерполяция интенсивности по барицентрическим координатам — шейдинг Гуро.
+                        double brightness;
+                        if (perspective)
+                        {
+                            brightness = (a * brightness0 * d0
+                                        + b * brightness1 * d1
+                                        + c * brightness2 * d2) / interpolated;
+                        }
+                        else
+                        {
+                            brightness = a * brightness0 + b * brightness1 + c * brightness2;
+                        }
+                        bitmap.SetPixel(x, y, Shade(baseColor, brightness));
                     }
                 }
             }

@@ -23,6 +23,9 @@ namespace PolyhedraLab
         public bool Wireframe { get; set; }
         public bool ShowNormals { get; set; }
 
+        /// <summary>Базовый цвет объекта, к которому применяется освещённость Гуро.</summary>
+        public Color ObjectColor { get; set; } = Color.SteelBlue;
+
         /// <summary>Прямая для поворота (две точки A и B). Рисуется пунктиром, если ShowLine = true.</summary>
         public bool ShowLine { get; set; }
         public Point LineA { get; set; }
@@ -184,7 +187,7 @@ namespace PolyhedraLab
                 // Один общий Z-буфер для всех граней.
                 using (Bitmap image = ZBufferRenderer.Render(
                     allFaces, size.Width, size.Height,
-                    Color.SteelBlue, Color.FromArgb(40, 40, 70)))
+                    ObjectColor, Color.FromArgb(40, 40, 70)))
                     g.DrawImageUnscaled(image, 0, 0);
             }
 

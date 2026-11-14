@@ -8,6 +8,9 @@ public sealed class Polyhedron
     public List<Point> Vertices { get; }
     public List<Polygon> Faces { get; }
 
+    /// <summary>Усреднённые единичные нормали вершин в координатах модели.</summary>
+    public List<Point> VertexNormals { get; private set; } = new();
+
     public Polyhedron(IEnumerable<Point> vertices, IEnumerable<Polygon> faces)
     {
         ArgumentNullException.ThrowIfNull(vertices);
@@ -43,6 +46,44 @@ public sealed class Polyhedron
             Vertices.Average(p => p.Z));
         foreach (Polygon face in Faces)
             face.UpdateNormal(Vertices, center);
+
+        UpdateVertexNormals();
+    }
+
+    /// <summary>
+    /// Вычисляет нормаль каждой вершины как среднее нормалей всех смежных граней.
+    /// Нормали граней уже ориентированы наружу методом Polygon.UpdateNormal.
+    /// </summary>
+    private void UpdateVertexNormals()
+    {
+        double[] nx = new double[Vertices.Count];
+        double[] ny = new double[Vertices.Count];
+        double[] nz = new double[Vertices.Count];
+        int[] counts = new int[Vertices.Count];
+
+        foreach (Polygon face in Faces)
+        {
+            Point normal = face.Normal;
+            if (normal.X == 0 && normal.Y == 0 && normal.Z == 0)
+                continue;
+
+            foreach (int vertexIndex in face.VertexIndices)
+            {
+                nx[vertexIndex] += normal.X;
+                ny[vertexIndex] += normal.Y;
+                nz[vertexIndex] += normal.Z;
+                counts[vertexIndex]++;
+            }
+        }
+
+        VertexNormals = new List<Point>(Vertices.Count);
+        for (int i = 0; i < Vertices.Count; i++)
+        {
+            double length = Math.Sqrt(nx[i] * nx[i] + ny[i] * ny[i] + nz[i] * nz[i]);
+            VertexNormals.Add(length > 1e-12 && counts[i] > 0
+                ? new Point(nx[i] / length, ny[i] / length, nz[i] / length)
+                : new Point(0, 0, 0));
+        }
     }
 
     public static Polyhedron CreateSphere()

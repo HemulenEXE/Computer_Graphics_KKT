@@ -25,6 +25,15 @@ namespace PolyhedraLab
         /// <summary>Не рисовать нелицевые (обращённые от зрителя) грани.</summary>
         public bool HideBackFaces = true;
 
+        /// <summary>Положение точечного источника света в мировых координатах.</summary>
+        public Point LightPosition { get; set; } = new Point(4, 5, 6);
+
+        /// <summary>Доля фонового освещения (0..1).</summary>
+        public double AmbientStrength { get; set; } = 0.25;
+
+        /// <summary>Доля диффузного освещения (0..1).</summary>
+        public double DiffuseStrength { get; set; } = 0.75;
+
         public ViewSettings()
         {
             UpdateCamera();
@@ -41,7 +50,8 @@ namespace PolyhedraLab
     {
         public int Index;
         public PointF[] Points = new PointF[0];
-        public double Brightness;   // 0..1, освещённость грани
+        public double Brightness;   // резервное/среднее значение освещённости
+        public double[] VertexBrightness = new double[0]; // освещённость каждой вершины грани
         public bool IsFront;        // обращена ли грань к зрителю
         public double Depth;        // глубина центра грани (чем больше, тем ближе к зрителю)
 
@@ -70,15 +80,6 @@ namespace PolyhedraLab
     {
         // Точки, у которых w' меньше этого значения, считаются находящимися за камерой.
         private const double NearLimit = 0.05;
-
-        // Направление на источник света в системе координат вида (y вверх, z к зрителю).
-        private static readonly double[] LightDirection = Normalize(-0.4, 0.6, 1.0);
-
-        private static double[] Normalize(double x, double y, double z)
-        {
-            double len = Math.Sqrt(x * x + y * y + z * z);
-            return new double[] { x / len, y / len, z / len };
-        }
 
         /// <summary>Проекция одной точки пространства (для осей, прямой и т.п.). null — точка за камерой.</summary>
         public static PointF? ProjectPoint(double x, double y, double z, ViewSettings s, PointF origin)
@@ -132,6 +133,11 @@ namespace PolyhedraLab
             int n = poly.Vertices.Count;
             double[][] vv = new double[n][];          // вершины в системе координат вида
 
+            double[] vertexBrightness = new double[n];
+            Point light = s.LightPosition;
+            double ambient = Math.Max(0.0, Math.Min(1.0, s.AmbientStrength));
+            double diffuse = Math.Max(0.0, Math.Min(1.0 - ambient, s.DiffuseStrength));
+
             for (int i = 0; i < n; i++)
             {
                 Point p = poly.Vertices[i];
@@ -140,6 +146,26 @@ namespace PolyhedraLab
                                                   p.Y + offsetY,
                                                   p.Z + offsetZ);
                 vv[i] = t;
+
+                // Освещение вычисляется в мировых координатах: нормаль и вектор
+                // на источник света находятся в одной системе координат.
+                Point normal = poly.VertexNormals[i];
+                double lx = light.X - (p.X + offsetX);
+                double ly = light.Y - (p.Y + offsetY);
+                double lz = light.Z - (p.Z + offsetZ);
+                double lightLength = Math.Sqrt(lx * lx + ly * ly + lz * lz);
+
+                double lambert = 0.0;
+                if (lightLength > 1e-12)
+                {
+                    lx /= lightLength;
+                    ly /= lightLength;
+                    lz /= lightLength;
+                    lambert = Math.Max(0.0,
+                        normal.X * lx + normal.Y * ly + normal.Z * lz);
+                }
+
+                vertexBrightness[i] = ambient + diffuse * lambert;
             }
 
             ProjectedPolyhedron result = new ProjectedPolyhedron();
@@ -224,8 +250,6 @@ namespace PolyhedraLab
                 double nz = normal.X * view[0, 2] + normal.Y * view[1, 2] + normal.Z * view[2, 2];
                 double[] fc = Projection.Transform(view, center.X + offsetX, center.Y + offsetY, center.Z + offsetZ);
 
-                double light = nx * LightDirection[0] + ny * LightDirection[1] + nz * LightDirection[2];
-
                 ProjectedFace face = new ProjectedFace();
                 face.Index = f;
                 face.Points = pts;
@@ -233,7 +257,14 @@ namespace PolyhedraLab
                 face.Depth = fc[2];
                 face.DepthValues = depthValues;
                 face.IsPerspective = perspective;
-                face.Brightness = 0.35 + 0.65 * Math.Max(0.0, light);
+                face.VertexBrightness = new double[k];
+                double brightnessSum = 0.0;
+                for (int j = 0; j < k; j++)
+                {
+                    face.VertexBrightness[j] = vertexBrightness[idx[j]];
+                    brightnessSum += face.VertexBrightness[j];
+                }
+                face.Brightness = brightnessSum / k;
                 face.NormalStart = ProjectViewSpace(fc[0], fc[1], fc[2], proj, s, origin);
                 face.NormalEnd = ProjectViewSpace(fc[0] + nx * 0.35, fc[1] + ny * 0.35, fc[2] + nz * 0.35, proj, s, origin);
                 result.Faces.Add(face);

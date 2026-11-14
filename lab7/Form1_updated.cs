@@ -57,6 +57,14 @@ namespace PolyhedraLab
         private readonly CheckBox chkWireframe = new CheckBox();
         private readonly CheckBox chkNormals = new CheckBox();
         private readonly CheckBox chkAutoRotate = new CheckBox();
+
+        // ----- освещение Гуро -----
+        private readonly NumericUpDown numLightX = Num(4, -100, 100, 2, 0.5m);
+        private readonly NumericUpDown numLightY = Num(5, -100, 100, 2, 0.5m);
+        private readonly NumericUpDown numLightZ = Num(6, -100, 100, 2, 0.5m);
+        private readonly Button btnObjectColor = new Button();
+        private Color _objectColor = Color.SteelBlue;
+
         private readonly System.Windows.Forms.Timer _rotationTimer = new() { Interval = 33 };
         private readonly System.Diagnostics.Stopwatch _rotationClock = new();
 
@@ -227,6 +235,35 @@ namespace PolyhedraLab
             chkNormals.AutoSize = true;
             chkAutoRotate.Text = "Вращать объект вокруг Y";
             chkAutoRotate.AutoSize = true;
+            Btn(btnObjectColor, "Цвет объекта");
+            btnObjectColor.BackColor = _objectColor;
+            btnObjectColor.ForeColor = Color.White;
+            btnObjectColor.Click += delegate
+            {
+                using (ColorDialog dialog = new ColorDialog { Color = _objectColor, FullOpen = true })
+                {
+                    if (dialog.ShowDialog(this) == DialogResult.OK)
+                    {
+                        _objectColor = dialog.Color;
+                        _view.ObjectColor = _objectColor;
+                        btnObjectColor.BackColor = _objectColor;
+                        btnObjectColor.ForeColor = _objectColor.GetBrightness() < 0.5 ? Color.White : Color.Black;
+                        _view.Invalidate();
+                    }
+                }
+            };
+
+            EventHandler lightChanged = delegate
+            {
+                _view.Settings.LightPosition = new Point(
+                    (double)numLightX.Value,
+                    (double)numLightY.Value,
+                    (double)numLightZ.Value);
+                _view.Invalidate();
+            };
+            numLightX.ValueChanged += lightChanged;
+            numLightY.ValueChanged += lightChanged;
+            numLightZ.ValueChanged += lightChanged;
 
             Label zoomHint = Lbl("Вращение: зажмите среднюю кнопку мыши и двигайте");
             zoomHint.ForeColor = Color.DimGray;
@@ -276,6 +313,10 @@ namespace PolyhedraLab
 
             stack.Controls.Add(Group("График функции z = f(x, y)",
                 Row(btnSurfaceGraph)));
+
+            stack.Controls.Add(Group("Освещение Гуро (Ламберт)",
+                Row(Lbl("Источник света X"), numLightX, Lbl("Y"), numLightY, Lbl("Z"), numLightZ),
+                Row(btnObjectColor)));
 
             stack.Controls.Add(Group("Проекция",
                 Row(rbAxonometric, rbPerspective),
@@ -338,6 +379,11 @@ namespace PolyhedraLab
 
             WireEvents();
             ApplyViewSettings();
+            _view.ObjectColor = _objectColor;
+            _view.Settings.LightPosition = new Point(
+                (double)numLightX.Value,
+                (double)numLightY.Value,
+                (double)numLightZ.Value);
             UpdateRotationLine();
             RefreshAll();
         }
