@@ -4,6 +4,12 @@ using System.Drawing;
 
 namespace PolyhedraLab
 {
+    public enum ShadingMode
+    {
+        Gouraud,
+        Phong
+    }
+
     /// <summary>Параметры просмотра (проекция, углы вида, расстояние до камеры, масштаб).</summary>
     public sealed class ViewSettings
     {
@@ -34,6 +40,9 @@ namespace PolyhedraLab
         /// <summary>Доля диффузного освещения (0..1).</summary>
         public double DiffuseStrength { get; set; } = 0.75;
 
+        /// <summary>Способ интерполяции освещения внутри грани.</summary>
+        public ShadingMode ShadingMode { get; set; } = ShadingMode.Gouraud;
+
         public ViewSettings()
         {
             UpdateCamera();
@@ -57,6 +66,8 @@ namespace PolyhedraLab
 
         // Значение глубины для каждой вершины.
         public double[] DepthValues = new double[0];
+        public Point[] VertexNormals = new Point[0];
+        public Point[] VertexPositions = new Point[0];
 
         // Тип проекции, использованный при вычислении глубины.
         public bool IsPerspective;
@@ -258,10 +269,19 @@ namespace PolyhedraLab
                 face.DepthValues = depthValues;
                 face.IsPerspective = perspective;
                 face.VertexBrightness = new double[k];
+                face.VertexNormals = new Point[k];
+                face.VertexPositions = new Point[k];
                 double brightnessSum = 0.0;
                 for (int j = 0; j < k; j++)
                 {
-                    face.VertexBrightness[j] = vertexBrightness[idx[j]];
+                    int vertexIndex = idx[j];
+                    face.VertexBrightness[j] = vertexBrightness[vertexIndex];
+                    face.VertexNormals[j] = poly.VertexNormals[vertexIndex].Clone();
+                    Point vertex = poly.Vertices[vertexIndex];
+                    face.VertexPositions[j] = new Point(
+                        vertex.X + offsetX,
+                        vertex.Y + offsetY,
+                        vertex.Z + offsetZ);
                     brightnessSum += face.VertexBrightness[j];
                 }
                 face.Brightness = brightnessSum / k;

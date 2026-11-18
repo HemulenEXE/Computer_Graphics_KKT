@@ -18,6 +18,29 @@ namespace PolyhedraLab
             Color baseColor,
             Color outlineColor)
         {
+            return Render(
+                faces,
+                width,
+                height,
+                baseColor,
+                outlineColor,
+                ShadingMode.Gouraud,
+                new Point(4, 5, 6),
+                0.25,
+                0.75);
+        }
+
+        public static Bitmap Render(
+            IList<ProjectedFace> faces,
+            int width,
+            int height,
+            Color baseColor,
+            Color outlineColor,
+            ShadingMode shadingMode,
+            Point lightPosition,
+            double ambientStrength,
+            double diffuseStrength)
+        {
             if (width <= 0 || height <= 0)
                 throw new ArgumentException("Некорректный размер изображения.");
 
@@ -46,6 +69,8 @@ namespace PolyhedraLab
 
             foreach (ProjectedFace face in faces)
             {
+                Point[]? vertexNormals = face.VertexNormals;
+                Point[]? vertexPositions = face.VertexPositions;
                 if (face.Points == null ||
                     face.DepthValues == null ||
                     face.Points.Length < 3 ||
@@ -54,6 +79,12 @@ namespace PolyhedraLab
 
                 if (face.VertexBrightness == null ||
                     face.VertexBrightness.Length != face.Points.Length)
+                    continue;
+                if (shadingMode == ShadingMode.Phong &&
+                    (vertexNormals == null ||
+                     vertexNormals.Length != face.Points.Length ||
+                     vertexPositions == null ||
+                     vertexPositions.Length != face.Points.Length))
                     continue;
 
                 // Разбиваем выпуклый полигон на треугольники.
@@ -76,7 +107,16 @@ namespace PolyhedraLab
                         baseColor,
                         face.VertexBrightness[0],
                         face.VertexBrightness[i],
-                        face.VertexBrightness[i + 1]);
+                        face.VertexBrightness[i + 1],
+                        shadingMode == ShadingMode.Phong ? vertexNormals![0] : null,
+                        shadingMode == ShadingMode.Phong ? vertexNormals![i] : null,
+                        shadingMode == ShadingMode.Phong ? vertexNormals![i + 1] : null,
+                        shadingMode == ShadingMode.Phong ? vertexPositions![0] : null,
+                        shadingMode == ShadingMode.Phong ? vertexPositions![i] : null,
+                        shadingMode == ShadingMode.Phong ? vertexPositions![i + 1] : null,
+                        lightPosition,
+                        ambientStrength,
+                        diffuseStrength);
                 }
 
                 // Рисуем только внешние рёбра грани.
@@ -116,7 +156,16 @@ namespace PolyhedraLab
             Color baseColor,
             double brightness0,
             double brightness1,
-            double brightness2)
+            double brightness2,
+            Point? normal0,
+            Point? normal1,
+            Point? normal2,
+            Point? position0,
+            Point? position1,
+            Point? position2,
+            Point lightPosition,
+            double ambientStrength,
+            double diffuseStrength)
         {
             int width = bitmap.Width;
             int height = bitmap.Height;
@@ -196,17 +245,60 @@ namespace PolyhedraLab
                     if (depth < zBuffer[x, y])
                     {
                         zBuffer[x, y] = depth;
-                        // Интерполяция интенсивности по барицентрическим координатам — шейдинг Гуро.
-                        double brightness;
-                        if (perspective)
+                        double brightness = 0;
+                        if (normal0 != null && normal1 != null && normal2 != null
+                            && position0 != null && position1 != null && position2 != null)
                         {
-                            brightness = (a * brightness0 * d0
-                                        + b * brightness1 * d1
-                                        + c * brightness2 * d2) / interpolated;
+                            double nx, ny, nz;
+                            double worldX, worldY, worldZ;
+                            if (perspective)
+                            {
+                                nx = (a * normal0.X * d0 + b * normal1.X * d1 + c * normal2.X * d2) / interpolated;
+                                ny = (a * normal0.Y * d0 + b * normal1.Y * d1 + c * normal2.Y * d2) / interpolated;
+                                nz = (a * normal0.Z * d0 + b * normal1.Z * d1 + c * normal2.Z * d2) / interpolated;
+                                worldX = (a * position0.X * d0 + b * position1.X * d1 + c * position2.X * d2) / interpolated;
+                                worldY = (a * position0.Y * d0 + b * position1.Y * d1 + c * position2.Y * d2) / interpolated;
+                                worldZ = (a * position0.Z * d0 + b * position1.Z * d1 + c * position2.Z * d2) / interpolated;
+                            }
+                            else
+                            {
+                                nx = a * normal0.X + b * normal1.X + c * normal2.X;
+                                ny = a * normal0.Y + b * normal1.Y + c * normal2.Y;
+                                nz = a * normal0.Z + b * normal1.Z + c * normal2.Z;
+                                worldX = a * position0.X + b * position1.X + c * position2.X;
+                                worldY = a * position0.Y + b * position1.Y + c * position2.Y;
+                                worldZ = a * position0.Z + b * position1.Z + c * position2.Z;
+                            }
+
+                            double normalLength = Math.Sqrt(nx * nx + ny * ny + nz * nz);
+                            double lx = lightPosition.X - worldX;
+                            double ly = lightPosition.Y - worldY;
+                            double lz = lightPosition.Z - worldZ;
+                            double lightLength = Math.Sqrt(lx * lx + ly * ly + lz * lz);
+                            double lambert = 0;
+                            if (normalLength > 1e-12 && lightLength > 1e-12)
+                            {
+                                lambert = Math.Max(0,
+                                    (nx * lx + ny * ly + nz * lz) / (normalLength * lightLength));
+                            }
+
+                            double ambient = Math.Max(0, Math.Min(1, ambientStrength));
+                            double diffuse = Math.Max(0, Math.Min(1 - ambient, diffuseStrength));
+                            brightness = ambient + diffuse * lambert;
                         }
                         else
                         {
-                            brightness = a * brightness0 + b * brightness1 + c * brightness2;
+                            // Интерполяция интенсивности по барицентрическим координатам — шейдинг Гуро.
+                            if (perspective)
+                            {
+                                brightness = (a * brightness0 * d0
+                                            + b * brightness1 * d1
+                                            + c * brightness2 * d2) / interpolated;
+                            }
+                            else
+                            {
+                                brightness = a * brightness0 + b * brightness1 + c * brightness2;
+                            }
                         }
                         bitmap.SetPixel(x, y, Shade(baseColor, brightness));
                     }

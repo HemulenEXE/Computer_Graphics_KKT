@@ -63,6 +63,7 @@ namespace PolyhedraLab
         private readonly NumericUpDown numLightY = Num(5, -100, 100, 2, 0.5m);
         private readonly NumericUpDown numLightZ = Num(6, -100, 100, 2, 0.5m);
         private readonly Button btnObjectColor = new Button();
+        private readonly ComboBox cmbShadingMode = new ComboBox();
         private Color _objectColor = Color.SteelBlue;
 
         private readonly System.Windows.Forms.Timer _rotationTimer = new() { Interval = 33 };
@@ -236,6 +237,11 @@ namespace PolyhedraLab
             chkAutoRotate.Text = "Вращать объект вокруг Y";
             chkAutoRotate.AutoSize = true;
             Btn(btnObjectColor, "Цвет объекта");
+            cmbShadingMode.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbShadingMode.Items.AddRange(new object[] { "Гуро", "Фонг" });
+            cmbShadingMode.SelectedIndex = 0;
+            cmbShadingMode.Width = 110;
+            cmbShadingMode.SelectedIndexChanged += delegate { ApplyViewSettings(); };
             btnObjectColor.BackColor = _objectColor;
             btnObjectColor.ForeColor = Color.White;
             btnObjectColor.Click += delegate
@@ -314,8 +320,9 @@ namespace PolyhedraLab
             stack.Controls.Add(Group("График функции z = f(x, y)",
                 Row(btnSurfaceGraph)));
 
-            stack.Controls.Add(Group("Освещение Гуро (Ламберт)",
+            stack.Controls.Add(Group("Освещение (Ламберт)",
                 Row(Lbl("Источник света X"), numLightX, Lbl("Y"), numLightY, Lbl("Z"), numLightZ),
+                Row(Lbl("Шейдинг:"), cmbShadingMode),
                 Row(btnObjectColor)));
 
             stack.Controls.Add(Group("Проекция",
@@ -632,6 +639,9 @@ namespace PolyhedraLab
             s.Yaw = (double)numYaw.Value;
             s.Pitch = (double)numPitch.Value;
             s.Distance = (double)numDistance.Value;
+            s.ShadingMode = cmbShadingMode.SelectedIndex == 1
+                ? ShadingMode.Phong
+                : ShadingMode.Gouraud;
             s.UpdateCamera();
             s.HideBackFaces = chkHideBack.Checked;
 

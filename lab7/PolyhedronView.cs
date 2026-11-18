@@ -187,7 +187,11 @@ namespace PolyhedraLab
                 // Один общий Z-буфер для всех граней.
                 using (Bitmap image = ZBufferRenderer.Render(
                     allFaces, size.Width, size.Height,
-                    ObjectColor, Color.FromArgb(40, 40, 70)))
+                    ObjectColor, Color.FromArgb(40, 40, 70),
+                    Settings.ShadingMode,
+                    Settings.LightPosition,
+                    Settings.AmbientStrength,
+                    Settings.DiffuseStrength))
                     g.DrawImageUnscaled(image, 0, 0);
             }
 

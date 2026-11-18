@@ -117,6 +117,31 @@ internal static class Program
                     Check(differences < 400, "Culling must preserve the Z-buffer image except for rasterized edge tolerances");
                 }
             }),
+            ("Phong shading interpolates and normalizes vertex normals per pixel", () =>
+            {
+                Polyhedron sphere = Polyhedron.CreateSphere();
+                ViewSettings settings = new() { Kind = ProjectionKind.Perspective, Zoom = 50 };
+                ProjectedPolyhedron projected = Projector.Project(sphere, settings, new PointF(90, 90));
+                Check(projected.Faces.All(face =>
+                    face.VertexNormals.Length == face.Points.Length
+                    && face.VertexPositions.Length == face.Points.Length),
+                    "Projected faces must carry normals and world positions for each vertex");
+
+                using Bitmap gouraud = ZBufferRenderer.Render(
+                    projected.Faces, 180, 180, Color.SteelBlue, Color.Black,
+                    ShadingMode.Gouraud, settings.LightPosition,
+                    settings.AmbientStrength, settings.DiffuseStrength);
+                using Bitmap phong = ZBufferRenderer.Render(
+                    projected.Faces, 180, 180, Color.SteelBlue, Color.Black,
+                    ShadingMode.Phong, settings.LightPosition,
+                    settings.AmbientStrength, settings.DiffuseStrength);
+                int differences = 0;
+                for (int y = 0; y < 180; y++)
+                    for (int x = 0; x < 180; x++)
+                        if (gouraud.GetPixel(x, y) != phong.GetPixel(x, y))
+                            differences++;
+                Check(differences > 100, "Per-pixel Phong shading must differ visibly from Gouraud shading");
+            }),
             ("Form controls, animation and both rendering modes", () =>
             {
                 using Form1 form = new();
@@ -132,6 +157,9 @@ internal static class Program
                 Check(Math.Abs(model.Vertices[0].X - originalX) > 1e-5, "Animation must rotate object vertices");
                 CheckNormals(model);
                 PolyhedronView view = Field<PolyhedronView>("_view");
+                ComboBox shading = Field<ComboBox>("cmbShadingMode");
+                shading.SelectedIndex = 1;
+                Check(view.Settings.ShadingMode == ShadingMode.Phong, "Phong selection must update view settings");
                 using Bitmap image = new(500, 400);
                 using Graphics g = Graphics.FromImage(image);
                 foreach (bool wireframe in new[] { false, true })
